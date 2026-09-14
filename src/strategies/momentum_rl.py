@@ -160,7 +160,7 @@ class MomentumRLStrategy(BaseStrategy):
             # Take profit
             take_profit = current_price * 1.15
 
-            reasoning = f"Momentum: Score={momentism_score:.1f}, Vol={volume_expansion}, "
+            reasoning = f"Momentum: Score={momentum_score:.1f}, Vol={volume_expansion}, "
             reasoning += f"Trend={trend_strength:.1f}, RSI={rsi_val:.1f}, MACD={macd_bullish}"
 
             signal = Signal(

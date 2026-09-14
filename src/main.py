@@ -8,19 +8,25 @@ from loguru import logger
 import schedule
 import time
 
-# Add src to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add project root and src to path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+src_dir = os.path.join(project_root, "src")
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
 from config.config import settings
-from data.data_fetcher import DataFetcher
-from strategies import (
+from src.data.data_fetcher import DataFetcher
+from src.intelligence.llm_reasoner import LLMReasoningEngine
+from src.strategies import (
     CANSLIMStrategy,
     SEPAStrategy,
     StageAnalysisStrategy,
     MomentumRLStrategy,
     MeanReversionStrategy
 )
-from execution.paper_trader import PaperTrader
+from src.execution.paper_trader import PaperTrader
 
 class TradingBot:
     """
@@ -29,6 +35,7 @@ class TradingBot:
 
     def __init__(self):
         self.fetcher = DataFetcher()
+        self.reasoner = LLMReasoningEngine(gemini_api_key=settings.gemini_api_key)
 
         # Initialize paper traders for each market
         self.us_trader = PaperTrader(initial_capital=settings.us_capital)
@@ -96,11 +103,26 @@ class TradingBot:
         return all_signals
 
     def execute_signals(self, signals: list, market: str):
-        """Execute trading signals"""
+        """Execute trading signals with LLM validation gate"""
         trader = self.us_trader if market == "US" else self.india_trader
 
         for signal in signals:
             try:
+                # LLM / Fast-risk validation
+                validation = self.reasoner.validate_signal_fast(
+                    symbol=signal.symbol,
+                    signal_type=signal.signal_type.value,
+                    price=signal.price,
+                    strategy_name=signal.strategy_name,
+                    stop_loss=signal.stop_loss or (signal.price * 0.94),
+                    take_profit=signal.take_profit or (signal.price * 1.15),
+                    market_context={"market": market, "regime": "volatile"}
+                )
+
+                if validation.verdict == "REJECT":
+                    logger.warning(f"Trade rejected for {signal.symbol} by Reasoner: {validation.technical_thesis}")
+                    continue
+
                 # Calculate position size
                 position_size = self.calculate_position_size(
                     trader.portfolio.total_value,
@@ -117,7 +139,7 @@ class TradingBot:
                         strategy=signal.strategy_name,
                         stop_loss=signal.stop_loss,
                         take_profit=signal.take_profit,
-                        reasoning=signal.reasoning
+                        reasoning=f"{signal.reasoning} | Verdict: {validation.technical_thesis}"
                     )
                     logger.info(f"Executed: {order}")
 
