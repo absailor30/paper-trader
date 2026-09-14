@@ -1,0 +1,43 @@
+# Core Trading
+alpaca-py>=0.30.0
+yfinance>=0.2.40
+pandas>=2.2.0
+numpy>=1.26.0
+
+# Machine Learning
+stable-baselines3>=2.3.0
+gymnasium>=0.29.0
+torch>=2.3.0
+scikit-learn>=1.5.0
+
+# LLM Integration
+google-generativeai>=0.8.0
+transformers>=4.44.0
+accelerate>=0.33.0
+
+# Data & Storage
+sqlalchemy>=2.0.0
+sqlite3
+
+# Visualization & Dashboard
+streamlit>=1.37.0
+plotly>=5.23.0
+matplotlib>=3.9.0
+
+# Utilities
+python-dotenv>=1.0.0
+requests>=2.32.0
+aiohttp>=3.10.0
+schedule>=1.2.0
+loguru>=0.7.0
+pydantic>=2.8.0
+
+# Backtesting
+vectorbt>=0.26.0
+
+# News & Sentiment
+newspaper3k>=0.2.8
+textblob>=0.18.0
+
+# Performance
+numba>=0.60.0
