@@ -45,7 +45,7 @@ def run_daily_cycle():
         if india_signals:
             print("\nIndia Signals:")
             for sig in india_signals:
-                print(f"  - {sig.symbol}: {sig.signal_type.value} @ ₹{sig.price:.2f} | {sig.reasoning[:80]}...")
+                print(f"  - {sig.symbol}: {sig.signal_type.value} @ INR {sig.price:.2f} | {sig.reasoning[:80]}...")
 
         # 3. Execute signals (with LLM validation)
         logger.info("Executing validated signals...")
