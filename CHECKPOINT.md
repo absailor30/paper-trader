@@ -22,19 +22,26 @@
 
 ---
 
-### 2. Autonomous Monitoring & Research Engine
-- **Live Risk Daemon (`src/execution/live_monitor.py`)**:
-  - Real-time tick polling every 5 seconds during active market hours:
-    - NSE: 09:15 – 15:30 IST
-    - US: 09:30 – 16:00 EST
-  - Auto-evaluates stop-loss and take-profit targets on every tick.
-  - Off-market hours: halts 5-second polling to prevent rate limits and compute waste; calculates exact countdown to 06:00:00 AM IST.
-- **Pre-Market Research Engine (`src/intelligence/premarket_research.py`)**:
-  - Autonomous wake-up scheduled at 06:00 AM IST daily.
-  - Scans global macro regime (`CL=F` Crude, `GC=F` Gold, `ES=F` S&P Futures, `^NSEI` Nifty).
-  - Screens US and Indian universes for Stage 2 breakouts (50 SMA > 150 SMA, Vol > 1.2x) and oversold mean-reversions (RSI < 30).
-  - Persists intelligence output to `data/watchlist_research.json`.
-  - Dispatches morning briefing directly to Telegram.
+### 2. Autonomous Market Understanding, Trading & Risk Engine
+- **Market Regime Detection (`src/intelligence/market_regime.py`)**:
+  - Dynamically classifies US (SPY, QQQ, VIX) and India (^NSEI, India VIX) into 4 macro states: `BULL_MOMENTUM`, `SIDEWAYS_CONSOLIDATION`, `BEAR_DOWNTREND`, `HIGH_VOLATILITY`.
+  - Strategy filtering: blocks breakout playbooks during bear/choppy regimes to eliminate false breakouts; unleashes momentum & stage 2 breakouts only during confirmed bull uptrends.
+  - Dynamic sizing: scales exposure up to full 12% in bull regimes, 6-8% in consolidation, down to 0-6% in high volatility.
+- **Autonomous Trade Execution (`src/main.py`)**:
+  - Validates risk-to-reward ratio (minimum 1.5:1 required).
+  - Enforces fractional share sizing for US ($5 min order) and integer shares for India.
+  - Automatically dispatches Telegram alerts on all BUY entries and SELL exits.
+- **Dynamic Trailing Stop Loss (`src/execution/paper_trader.py`)**:
+  - Automatically activates when position reaches +10% profit.
+  - Ratchets stop loss upward (5% below peak price) to lock in gains; never adjusts downward.
+- **24/7 Cloud Daemon (`src/execution/live_monitor.py`)**:
+  - **06:00 AM IST**: Autonomous pre-market global macro sweep, watchlist screening, and Telegram brief.
+  - **09:35 AM IST**: Autonomous Indian market entry cycle (screens Nifty 50, evaluates regime, executes approved buys).
+  - **15:35 IST**: Indian market close EOD reflection and Telegram performance summary.
+  - **09:45 AM EST (20:15 IST)**: Autonomous US market entry cycle (screens US universe, evaluates regime, executes approved buys).
+  - **16:05 EST**: US market close EOD reflection and Telegram performance summary.
+  - **Continuous 5-Second Ticks**: Real-time mark-to-market prices, trailing stop ratchet, and immediate stop-loss/take-profit exit.
+  - **Hourly**: Portfolio mark-to-market heartbeat sent to Telegram.
 
 ---
 

@@ -56,9 +56,12 @@ models/
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# OS
+# OS & Screenshots
 .DS_Store
 Thumbs.db
+*.png
+*.jpg
+*.jpeg
 
 # Portfolio state
 portfolio_state.json
