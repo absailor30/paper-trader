@@ -102,10 +102,14 @@ with tab_us:
             curr = p["quantity"] * p["current_price"]
             pnl = curr - cost
             pnl_pct = (pnl / cost) * 100 if cost > 0 else 0
+            alloc_pct = (curr / total_us_val) * 100 if total_us_val > 0 else 0
             pos_data.append({
                 "Symbol": sym,
                 "Strategy": p.get("strategy", "-"),
-                "Shares": p["quantity"],
+                "Shares": f"{p['quantity']:.4f}" if isinstance(p['quantity'], float) else p['quantity'],
+                "Invested Capital": f"${cost:.2f}",
+                "Current Value": f"${curr:.2f}",
+                "Portfolio %": f"{alloc_pct:.1f}%",
                 "Entry Price": f"${p['entry_price']:.2f}",
                 "Current Price": f"${p['current_price']:.2f}",
                 "Stop Loss": f"${p.get('stop_loss', 0):.2f}",
@@ -146,10 +150,14 @@ with tab_india:
             curr = p["quantity"] * p["current_price"]
             pnl = curr - cost
             pnl_pct = (pnl / cost) * 100 if cost > 0 else 0
+            alloc_pct = (curr / total_in_val) * 100 if total_in_val > 0 else 0
             in_pos_data.append({
                 "Symbol": sym,
                 "Strategy": p.get("strategy", "-"),
-                "Shares": p["quantity"],
+                "Shares": f"{p['quantity']:.4f}" if isinstance(p['quantity'], float) and p['quantity'] % 1 != 0 else int(p['quantity']),
+                "Invested Capital": f"₹{cost:.2f}",
+                "Current Value": f"₹{curr:.2f}",
+                "Portfolio %": f"{alloc_pct:.1f}%",
                 "Entry Price": f"₹{p['entry_price']:.2f}",
                 "Current Price": f"₹{p['current_price']:.2f}",
                 "Stop Loss": f"₹{p.get('stop_loss', 0):.2f}",
