@@ -7,6 +7,7 @@ import pandas as pd
 import json
 import os
 from datetime import datetime
+import yfinance as yf
 
 st.set_page_config(
     page_title="AI Paper Trader Dashboard",
@@ -36,8 +37,37 @@ def load_portfolio(filepath: str) -> dict:
             return {}
     return {}
 
+@st.cache_data(ttl=15)
+def get_live_ticker_price(symbol: str) -> float:
+    """Fetch real-time ticker price from Yahoo Finance with 15s cache"""
+    try:
+        ticker = yf.Ticker(symbol)
+        price = ticker.fast_info['last_price']
+        if price and not pd.isna(price):
+            return float(price)
+    except Exception:
+        pass
+    try:
+        hist = ticker.history(period="1d", interval="1m")
+        if not hist.empty:
+            return float(hist["Close"].iloc[-1])
+    except Exception:
+        pass
+    return None
+
 us_pf = load_portfolio("logs/us_portfolio.json")
 india_pf = load_portfolio("logs/india_portfolio.json")
+
+# Refresh live market prices for active positions
+for sym, pos in us_pf.get("positions", {}).items():
+    live_p = get_live_ticker_price(sym)
+    if live_p:
+        pos["current_price"] = live_p
+
+for sym, pos in india_pf.get("positions", {}).items():
+    live_p = get_live_ticker_price(sym)
+    if live_p:
+        pos["current_price"] = live_p
 
 tab_us, tab_india, tab_watchlist, tab_benchmark = st.tabs([
     "🇺🇸 US Stocks ($100)",
