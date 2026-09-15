@@ -135,7 +135,7 @@ class MomentumRLStrategy(BaseStrategy):
         macd_data = macd(data['close'])
         macd_bullish = macd_data['histogram'].iloc[-1] > 0
 
-        # Generate BUY signal
+        # Generate BUY signal (strict momentum rules: trend strength must be verified)
         buy_conditions = 0
 
         if momentum_score > 50:
@@ -144,13 +144,13 @@ class MomentumRLStrategy(BaseStrategy):
             buy_conditions += 1
         if trend_strength > 25:  # Strong trend
             buy_conditions += 1
-        if 40 < rsi_val < 70:  # Not oversold, not overbought
+        if 40 < rsi_val < 65:  # Healthy momentum, avoid overbought (>65)
             buy_conditions += 1
         if macd_bullish:
             buy_conditions += 1
 
-        # Need at least 3 conditions
-        if buy_conditions >= 3:
+        # High-expectancy gate: require at least 3 conditions AND trend strength > 20
+        if buy_conditions >= 3 and trend_strength > 20:
             confidence = buy_conditions / 5.0
 
             # Bollinger Bands for stop placement
