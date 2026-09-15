@@ -41,6 +41,12 @@ class TradingBot:
         self.us_trader = PaperTrader(initial_capital=settings.us_capital)
         self.india_trader = PaperTrader(initial_capital=settings.india_capital)
 
+        # Load existing persisted state if available
+        if os.path.exists("logs/us_portfolio.json"):
+            self.us_trader.load_state("logs/us_portfolio.json")
+        if os.path.exists("logs/india_portfolio.json"):
+            self.india_trader.load_state("logs/india_portfolio.json")
+
         # Initialize strategies
         self.strategies = [
             CANSLIMStrategy(),
@@ -123,11 +129,17 @@ class TradingBot:
                     logger.warning(f"Trade rejected for {signal.symbol} by Reasoner: {validation.technical_thesis}")
                     continue
 
-                # Calculate position size
+                # Calculate position size (fractional support for US, integer for India)
                 position_size = self.calculate_position_size(
                     trader.portfolio.total_value,
-                    signal.price
+                    signal.price,
+                    market=market,
+                    available_cash=trader.portfolio.capital
                 )
+
+                if position_size <= 0:
+                    logger.warning(f"Position size 0 for {signal.symbol} (price: {signal.price}, cash: {trader.portfolio.capital})")
+                    continue
 
                 # Place order
                 if signal.signal_type.value == "BUY":
@@ -146,11 +158,31 @@ class TradingBot:
             except Exception as e:
                 logger.error(f"Error executing signal for {signal.symbol}: {e}")
 
-    def calculate_position_size(self, portfolio_value: float, price: float) -> int:
-        """Calculate position size based on risk parameters"""
-        max_position_value = portfolio_value * settings.max_position_size
-        shares = int(max_position_value / price)
-        return max(shares, 1)  # At least 1 share
+    def calculate_position_size(
+        self,
+        portfolio_value: float,
+        price: float,
+        market: str = "US",
+        available_cash: float = 0.0
+    ) -> float:
+        """
+        Calculate position size based on risk parameters.
+        - US Equities: supports fractional shares (e.g. 0.05 shares of a $400 stock on $100 capital).
+        - Indian Equities: strictly whole integer shares (NSE/BSE constraint).
+        """
+        target_allocation = portfolio_value * settings.max_position_size
+        allocated_capital = min(target_allocation, available_cash)
+
+        if market == "US":
+            # US fractional shares up to 4 decimal places, minimum $5 order
+            if allocated_capital < 5.0:
+                return 0.0
+            shares = round(allocated_capital / price, 4)
+            return shares
+        else:
+            # India integer shares
+            shares = int(allocated_capital / price)
+            return float(shares)
 
     def check_risk_limits(self, market: str):
         """Check risk limits and circuit breakers"""
