@@ -1,0 +1,95 @@
+[
+  {
+    "id": "Tr4d1ngAg3nt001",
+    "name": "Autonomous Paper Trader Daily Pipeline",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "30 16 * * 1-5"
+              }
+            ]
+          }
+        },
+        "id": "e0a1b2c3-d4e5-4a6b-8c7d-9e0f1a2b3c4d",
+        "name": "Schedule (Daily 4:30 PM)",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [240, 300]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://host.docker.internal:20128/v1/chat/completions",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"model\": \"trading\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a veteran risk manager. Check market conditions before trading.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Check if energy and tech sectors show favorable breakout momentum today. Respond in 2 sentences.\"\n    }\n  ],\n  \"max_tokens\": 100\n}",
+          "options": {}
+        },
+        "id": "f1b2c3d4-e5a6-4b7c-8d9e-0f1a2b3c4d5e",
+        "name": "Gemini 3.8 Pre-Trade Scan (via 9router)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [460, 300],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "wZVyDMsKJmsYVkzA",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const analysis = $input.first().json.choices[0].message.content;\nreturn [{\n  json: {\n    timestamp: new Date().toISOString(),\n    market_status: 'EOD Cycle Ready',\n    regime_analysis: analysis,\n    pipeline_verified: true\n  }\n}];"
+        },
+        "id": "a2b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c6d",
+        "name": "Log Trade Readiness",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [680, 300]
+      }
+    ],
+    "connections": {
+      "Schedule (Daily 4:30 PM)": {
+        "main": [
+          [
+            {
+              "node": "Gemini 3.8 Pre-Trade Scan (via 9router)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Gemini 3.8 Pre-Trade Scan (via 9router)": {
+        "main": [
+          [
+            {
+              "node": "Log Trade Readiness",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    }
+  }
+]
