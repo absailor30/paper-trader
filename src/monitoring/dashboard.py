@@ -16,6 +16,15 @@ st.set_page_config(
 )
 
 st.title("Autonomous AI Paper Trader")
+
+# Sidebar auto-refresh controls
+st.sidebar.header("⏱️ Live Refresh Engine")
+auto_refresh = st.sidebar.checkbox("Auto-refresh live data", value=True)
+refresh_interval = st.sidebar.slider("Refresh interval (seconds)", min_value=5, max_value=60, value=10, step=5)
+
+if st.sidebar.button("🔄 Manual Refresh Now"):
+    st.rerun()
+
 st.caption(f"Real-time Paper Portfolio & Intelligence Monitor | Last refreshed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 def load_portfolio(filepath: str) -> dict:
@@ -146,3 +155,9 @@ with tab_benchmark:
         st.dataframe(bm_df, use_container_width=True)
     else:
         st.info("Run `python run_benchmark.py` to populate performance matrix.")
+
+# Auto-refresh loop
+if auto_refresh:
+    import time
+    time.sleep(refresh_interval)
+    st.rerun()
