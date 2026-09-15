@@ -156,6 +156,54 @@ with tab_benchmark:
     else:
         st.info("Run `python run_benchmark.py` to populate performance matrix.")
 
+    st.markdown("---")
+    st.subheader("Strategy Playbook & Empirical Trading Experience")
+    st.markdown("Granular breakdown of rules, indicators, real-market performance traits, and quantitative lessons learned.")
+
+    strategy_experience = [
+        {
+            "Strategy": "Stage Analysis (Stan Weinstein)",
+            "Foundational Concept": "30-week (150-day) SMA slope & volume breakout confirming transition from Stage 1 base to Stage 2 markup.",
+            "Key Indicators": "150-day SMA, 30-day Volume SMA (surge > 1.2x), 20-day High breakout pivot.",
+            "Historical Experience & Edge": "Highest overall Sharpe across both markets (1.04 on SHRIRAMFIN.NS, 0.93 on NVDA). Extremely low false-positive rate because trend filters out choppy distribution.",
+            "Weaknesses & Risks": "Lags at sudden macro turning points. Enters late if base is wide, requiring disciplined 8% stop loss.",
+            "Autonomous Verdict": "Primary vehicle for trend following & momentum continuation."
+        },
+        {
+            "Strategy": "SEPA & VCP (Mark Minervini)",
+            "Foundational Concept": "Specific Entry Point Analysis. Identifies Stage 2 leaders undergoing progressive Volatility Contraction (tightening ranges on drying volume).",
+            "Key Indicators": "200-day SMA, 150-day SMA, 50-day SMA alignment, ATR contraction (<0.75x 20-day ATR), volume surge (>1.3x) on pivot breach.",
+            "Historical Experience & Edge": "100% win rate on XOM in backtests; captured XLE energy breakout cleanly. Excellent asymmetric risk-to-reward (often > 3:1).",
+            "Weaknesses & Risks": "Low win rate during sideways choppy regimes (e.g., Reliance 14.3% win rate) when false breakouts trigger stop losses before contraction finishes.",
+            "Autonomous Verdict": "Best for high-conviction breakout setups with tight initial stops (5-7%)."
+        },
+        {
+            "Strategy": "Mean Reversion (Bollinger & Z-Score)",
+            "Foundational Concept": "Statistical reversion to mean price using volatility regimes and Bollinger Band squeeze boundaries.",
+            "Key Indicators": "20-day SMA, 2.0-3.0 StdDev Bollinger Bands, 14-day RSI (<35 oversold), Realized Volatility regime classification.",
+            "Historical Experience & Edge": "Highest Win Rate across universe (75% on NVDA, 100% on XOM, 80% on HDFCBANK). Lowest maximum drawdown (< 0.5%).",
+            "Weaknesses & Risks": "Low trade frequency. In strong runaway Stage 4 downtrends, catching falling knives requires strict RSI/ATR oversold confirmation.",
+            "Autonomous Verdict": "Ideal profit generator during range-bound regimes and flash panic pullbacks."
+        },
+        {
+            "Strategy": "CAN SLIM (William O'Neil)",
+            "Foundational Concept": "Current earnings/price momentum, cup-with-handle bases, institutional volume confirmation, and relative strength.",
+            "Key Indicators": "50-day SMA > 200-day SMA, Cup-with-handle depth (12-35%), volume surge (>1.5x), 250-day Relative Strength ranking.",
+            "Historical Experience & Edge": "Generated 8.10% net return on SHRIRAMFIN and 5.31% on AAPL. Strong when overall market index (SPY/NIFTY) is in confirmed rally.",
+            "Weaknesses & Risks": "High trade churn in choppy markets (22 trades on SHRIRAMFIN caused fee drag; 40.9% win rate).",
+            "Autonomous Verdict": "Requires broader index trend confirmation before firing buy orders."
+        },
+        {
+            "Strategy": "Momentum Multi-Factor (RL Blend)",
+            "Foundational Concept": "Composite scoring combining RSI, MACD histogram expansion, Rate of Change (ROC), and ADX trend strength.",
+            "Key Indicators": "RSI(14), MACD(12,26,9), ADX(14) > 25, 10-day ROC, Volume expansion ratio.",
+            "Historical Experience & Edge": "High signal velocity. Successfully triggered DRREDDY.NS buy today (Score=27.4, Vol=2.04x, R:R=3.26:1).",
+            "Weaknesses & Risks": "Overtrades heavily without minimum holding period filters (170+ trades in 3-yr unconstrained backtests led to transaction fee drag).",
+            "Autonomous Verdict": "Must be strictly gated by LLM Reasoner (R:R >= 1.5) and minimum cooldown periods to curb commissions."
+        }
+    ]
+    st.dataframe(pd.DataFrame(strategy_experience), use_container_width=True)
+
 # Auto-refresh loop
 if auto_refresh:
     import time
