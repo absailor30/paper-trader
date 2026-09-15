@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  trader:
+    build: .
+    container_name: ai_trading_agent
+    restart: always
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data

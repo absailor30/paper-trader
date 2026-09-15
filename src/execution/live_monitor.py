@@ -1,15 +1,20 @@
 """
 Continuous background price monitor and auto-exit manager.
-Polls live prices for active positions every 5 seconds ONLY during working market hours:
+Polls live prices for active positions every 5 seconds ONLY during active market hours:
 - Indian Market (NSE/BSE): 09:15 to 15:30 IST (Monday - Friday)
 - US Market (NYSE/NASDAQ): 09:30 to 16:00 EST/EDT (Monday - Friday)
 
-Outside market hours, sleeps 60 seconds to conserve compute and avoid rate limiting.
+Outside market hours:
+- Fully halts 5-second polling to conserve compute and avoid rate limits.
+- Calculates exact remaining seconds until 06:00:00 AM IST.
+- At 06:00 AM IST: executes pre-market quantitative screening, updates watchlist,
+  and dispatches daily morning intelligence digest to Telegram.
+- Re-enters monitor mode before 09:15 IST opening bell.
 """
 import sys
 import os
 import time
-from datetime import datetime, time as dtime
+from datetime import datetime, time as dtime, timedelta
 import zoneinfo
 import yfinance as yf
 from loguru import logger
@@ -19,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from src.execution.paper_trader import PaperTrader
 from src.notifications import notifier
+from src.intelligence.premarket_research import run_premarket_research
 from config.config import settings
 
 # Timezones
@@ -44,7 +50,6 @@ logger.add(
 def is_india_market_open() -> bool:
     """Check if Indian market (NSE) is currently open"""
     now_ist = datetime.now(TZ_INDIA)
-    # Check weekday (Monday to Friday)
     if now_ist.weekday() > 4:
         return False
     current_time = now_ist.time()
@@ -53,7 +58,6 @@ def is_india_market_open() -> bool:
 def is_us_market_open() -> bool:
     """Check if US market (NYSE/NASDAQ) is currently open"""
     now_us = datetime.now(TZ_US)
-    # Check weekday (Monday to Friday)
     if now_us.weekday() > 4:
         return False
     current_time = now_us.time()
@@ -64,7 +68,7 @@ def fetch_live_price(symbol: str) -> float:
     try:
         t = yf.Ticker(symbol)
         price = t.fast_info['last_price']
-        if price and not (isinstance(price, float) and price != price):  # Check NaN
+        if price and not (isinstance(price, float) and price != price):
             return float(price)
     except Exception:
         pass
@@ -79,22 +83,17 @@ def fetch_live_price(symbol: str) -> float:
 
     return None
 
-def monitor_pass(us_trader: PaperTrader, india_trader: PaperTrader):
+def monitor_pass(us_trader: PaperTrader, india_trader: PaperTrader) -> bool:
     """Execute one pass of live price update and stop-loss check"""
     us_open = is_us_market_open()
     india_open = is_india_market_open()
 
     if not us_open and not india_open:
-        # Both markets closed
-        now_ist = datetime.now(TZ_INDIA).strftime("%H:%M:%S IST")
-        now_us = datetime.now(TZ_US).strftime("%H:%M:%S EST")
-        logger.debug(f"Both markets closed (Current: {now_ist} | {now_us}). Standing by.")
         return False
 
     us_state_path = "logs/us_portfolio.json"
     india_state_path = "logs/india_portfolio.json"
 
-    # Reload state from disk to catch external changes
     if os.path.exists(us_state_path):
         us_trader.load_state(us_state_path)
     if os.path.exists(india_state_path):
@@ -147,19 +146,27 @@ def monitor_pass(us_trader: PaperTrader, india_trader: PaperTrader):
                     notifier.send_trade_alert(order, market="INDIA")
             changes = True
 
-    # 3. Save states on changes
     if changes:
         us_trader.save_state(us_state_path)
         india_trader.save_state(india_state_path)
 
     return True
 
+def seconds_until_6am_ist() -> float:
+    """Calculate exact seconds until next 06:00:00 AM IST"""
+    now_ist = datetime.now(TZ_INDIA)
+    target = now_ist.replace(hour=6, minute=0, second=0, microsecond=0)
+    if now_ist >= target:
+        target += timedelta(days=1)
+    return (target - now_ist).total_seconds()
+
 def run_live_monitor():
-    """Main loop: 5s poll during market hours, 60s idle when closed"""
+    """Main loop: 5s poll during market hours, scheduled 6 AM IST research when closed"""
     logger.info("=" * 65)
     logger.info("AUTONOMOUS REAL-TIME PRICE & RISK MONITOR LAUNCHED")
     logger.info("Active Market Polling: 5 seconds")
     logger.info("NSE Hours: 09:15 - 15:30 IST | US Hours: 09:30 - 16:00 EST")
+    logger.info("Off-Market Schedule: Sleep until 06:00 AM IST for autonomous research")
     logger.info("=" * 65)
 
     us_trader = PaperTrader(initial_capital=settings.us_capital)
@@ -167,21 +174,43 @@ def run_live_monitor():
 
     last_heartbeat = 0
     heartbeat_interval = getattr(settings, 'telegram_heartbeat_hours', 1) * 3600
+    last_research_date = None
 
     while True:
         try:
             market_active = monitor_pass(us_trader, india_trader)
 
-            # Send periodic heartbeat to Telegram
-            now = time.time()
-            if now - last_heartbeat >= heartbeat_interval:
-                notifier.send_heartbeat(us_trader.portfolio.positions, india_trader.portfolio.positions)
-                last_heartbeat = now
+            now_ist = datetime.now(TZ_INDIA)
+            current_date_ist = now_ist.strftime('%Y-%m-%d')
+
+            # Trigger 6:00 AM IST research once per calendar day
+            if now_ist.hour == 6 and now_ist.minute < 15 and last_research_date != current_date_ist:
+                logger.info("06:00 AM IST reached. Executing autonomous pre-market research routine.")
+                try:
+                    run_premarket_research()
+                    last_research_date = current_date_ist
+                except Exception as res_err:
+                    logger.error(f"Pre-market research error: {res_err}")
 
             if market_active:
-                time.sleep(5)  # 5-second polling during active market hours
+                # Active market polling
+                now = time.time()
+                if now - last_heartbeat >= heartbeat_interval:
+                    notifier.send_heartbeat(us_trader.portfolio.positions, india_trader.portfolio.positions)
+                    last_heartbeat = now
+                time.sleep(5)
             else:
-                time.sleep(30) # Standby check every 30s when both markets are closed
+                # Both markets closed: do not poll prices
+                sleep_secs = seconds_until_6am_ist()
+                # If within 15 minutes of 6am, sleep in short 30s checks so we hit the window cleanly
+                if sleep_secs > 900:
+                    hours_rem = sleep_secs / 3600
+                    logger.info(f"Markets closed. Halting price polling. Sleeping {hours_rem:.2f} hrs until 06:00 AM IST research.")
+                    # Sleep in 60s intervals to remain responsive to interruptions and state changes
+                    time.sleep(60)
+                else:
+                    time.sleep(30)
+
         except Exception as e:
             logger.error(f"Error in monitor loop: {e}")
             time.sleep(10)

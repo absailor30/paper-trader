@@ -6,6 +6,7 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import time
 from datetime import datetime
 import yfinance as yf
 
@@ -281,6 +282,5 @@ with tab_benchmark:
 
 # Auto-refresh loop
 if auto_refresh:
-    import time
     time.sleep(refresh_interval)
     st.rerun()

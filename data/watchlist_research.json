@@ -1,75 +1,87 @@
 {
   "last_updated": "2026-09-15",
   "market_regime": {
-    "US": "High Volatility / Geopolitical Shock (Brent > $105, AI Capex Pause)",
-    "INDIA": "Post-Holiday Rebound / Selective Sector Divergence (Finance strong, Metals weak)"
+    "GLOBAL": {
+      "Crude Oil": "101.39 (+1.34%)",
+      "Gold": "4351.90 (-1.29%)",
+      "S&P 500 Futures": "7625.00 (-0.45%)",
+      "India Nifty 50": "23398.10 (-0.34%)"
+    },
+    "US_COUNT": 5,
+    "INDIA_COUNT": 6
   },
-  "US": [
+  "US_CANDIDATES": [
+    {
+      "Symbol": "QCOM",
+      "Price": "$180.15",
+      "Setup": "SEPA / Momentum Breakout",
+      "RSI": 81.3,
+      "Vol_Surge": "1.21x"
+    },
+    {
+      "Symbol": "RTX",
+      "Price": "$195.34",
+      "Setup": "Oversold Pullback",
+      "RSI": 20.4,
+      "Vol_Surge": "0.89x"
+    },
+    {
+      "Symbol": "GOOGL",
+      "Price": "$349.39",
+      "Setup": "SEPA / Momentum Breakout",
+      "RSI": 51.2,
+      "Vol_Surge": "1.51x"
+    },
     {
       "Symbol": "XLE",
-      "Sector": "Energy ETF",
-      "Priority": "ACTIVE POSITION",
-      "Catalyst": "Crude oil spiked above $105 due to Middle East supply disruptions; Stage 2 breakout confirmed",
-      "Target Strategy": "SEPA_VCP",
-      "Key Level": "$64.50 breakout pivot"
+      "Price": "$64.53",
+      "Setup": "SEPA / Momentum Breakout",
+      "RSI": 59.0,
+      "Vol_Surge": "1.68x"
     },
     {
-      "Symbol": "XOM",
-      "Sector": "Integrated Oil",
-      "Priority": "High",
-      "Catalyst": "Free cash flow expansion with elevated refining margins",
-      "Target Strategy": "SEPA_VCP / Stage_Analysis",
-      "Key Level": "$125 support base"
-    },
-    {
-      "Symbol": "NVDA",
-      "Sector": "Semiconductors",
-      "Priority": "Watchlist (Pullback)",
-      "Catalyst": "Pullback on frontier AI safety debate; watching for Mean Reversion oversold bounce",
-      "Target Strategy": "Mean_Reversion",
-      "Key Level": "Lower Bollinger Band ($112)"
-    },
-    {
-      "Symbol": "LMT",
-      "Sector": "Aerospace & Defense",
-      "Priority": "Medium",
-      "Catalyst": "Defense spending commitments and geopolitical hedging demand",
-      "Target Strategy": "CAN_SLIM",
-      "Key Level": "$470 consolidation handle"
+      "Symbol": "XLK",
+      "Price": "$184.28",
+      "Setup": "SEPA / Momentum Breakout",
+      "RSI": 57.6,
+      "Vol_Surge": "1.33x"
     }
   ],
-  "INDIA": [
+  "INDIA_CANDIDATES": [
     {
       "Symbol": "SHRIRAMFIN.NS",
-      "Sector": "NBFC / Auto Finance",
-      "Priority": "Top Momentum",
-      "Catalyst": "+70% YTD leader; 1.04 Sharpe in backtests; persistent relative strength",
-      "Target Strategy": "Stage_Analysis",
-      "Key Level": "Stage 2 continuation above 20-day EMA"
+      "Price": "INR 1028.60",
+      "Setup": "Oversold Mean Reversion",
+      "RSI": 26.6,
+      "Vol_Surge": "0.90x"
     },
     {
-      "Symbol": "HDFCBANK.NS",
-      "Sector": "Private Banking",
-      "Priority": "High",
-      "Catalyst": "Leading Sep 2026 weekly gainers (+2.08%); credit growth stabilization",
-      "Target Strategy": "SEPA_VCP",
-      "Key Level": "Breakout above multi-month consolidation"
+      "Symbol": "WIPRO.NS",
+      "Price": "INR 167.40",
+      "Setup": "Oversold Mean Reversion",
+      "RSI": 29.3,
+      "Vol_Surge": "0.99x"
     },
     {
-      "Symbol": "DRREDDY.NS",
-      "Sector": "Pharma",
-      "Priority": "Medium (Defensive)",
-      "Catalyst": "Defensive rotation during Nifty volatility; strong export margins",
-      "Target Strategy": "Mean_Reversion",
-      "Key Level": "Support near ₹6,400"
+      "Symbol": "KOTAKBANK.NS",
+      "Price": "INR 419.00",
+      "Setup": "Stage 2 Continuation",
+      "RSI": 65.7,
+      "Vol_Surge": "1.24x"
     },
     {
-      "Symbol": "TECHM.NS",
-      "Sector": "IT Services",
-      "Priority": "Watchlist",
-      "Catalyst": "Telecom enterprise deal renewals; relative strength vs broader IT pack",
-      "Target Strategy": "CAN_SLIM",
-      "Key Level": "Pivot high breakout"
+      "Symbol": "HINDUNILVR.NS",
+      "Price": "INR 1927.00",
+      "Setup": "Oversold Mean Reversion",
+      "RSI": 29.2,
+      "Vol_Surge": "0.89x"
+    },
+    {
+      "Symbol": "LT.NS",
+      "Price": "INR 3930.70",
+      "Setup": "Oversold Mean Reversion",
+      "RSI": 29.6,
+      "Vol_Surge": "0.92x"
     }
   ]
 }
