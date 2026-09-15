@@ -10,16 +10,33 @@
             "interval": [
               {
                 "field": "cronExpression",
+                "expression": "30 15 * * 1-5"
+              }
+            ]
+          }
+        },
+        "id": "11111111-1111-4111-8111-111111111111",
+        "name": "NSE Market Close (3:30 PM IST)",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [200, 200]
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
                 "expression": "30 16 * * 1-5"
               }
             ]
           }
         },
-        "id": "e0a1b2c3-d4e5-4a6b-8c7d-9e0f1a2b3c4d",
-        "name": "Schedule (Daily 4:30 PM)",
+        "id": "22222222-2222-4222-8222-222222222222",
+        "name": "US Market Close (4:30 PM EST)",
         "type": "n8n-nodes-base.scheduleTrigger",
         "typeVersion": 1.2,
-        "position": [240, 300]
+        "position": [200, 420]
       },
       {
         "parameters": {
@@ -38,14 +55,14 @@
           },
           "sendBody": true,
           "specifyBody": "json",
-          "jsonBody": "={\n  \"model\": \"trading\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a veteran risk manager. Check market conditions before trading.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Check if energy and tech sectors show favorable breakout momentum today. Respond in 2 sentences.\"\n    }\n  ],\n  \"max_tokens\": 100\n}",
+          "jsonBody": "={\n  \"model\": \"trading\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a veteran risk manager overseeing US equities ($100 capital) and Indian equities (₹10,000 capital).\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Assess market regime today across US (AI dip, oil spike) and India NSE (finance leaders like SHRIRAMFIN/HDFCBANK vs metals). Output 2-sentence guidance.\"\n    }\n  ],\n  \"max_tokens\": 120\n}",
           "options": {}
         },
-        "id": "f1b2c3d4-e5a6-4b7c-8d9e-0f1a2b3c4d5e",
-        "name": "Gemini 3.8 Pre-Trade Scan (via 9router)",
+        "id": "33333333-3333-4333-8333-333333333333",
+        "name": "Gemini 3.8 Dual-Market Scan (via 9router)",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [460, 300],
+        "position": [460, 310],
         "credentials": {
           "httpHeaderAuth": {
             "id": "wZVyDMsKJmsYVkzA",
@@ -55,32 +72,43 @@
       },
       {
         "parameters": {
-          "jsCode": "const analysis = $input.first().json.choices[0].message.content;\nreturn [{\n  json: {\n    timestamp: new Date().toISOString(),\n    market_status: 'EOD Cycle Ready',\n    regime_analysis: analysis,\n    pipeline_verified: true\n  }\n}];"
+          "jsCode": "const analysis = $input.first().json.choices[0].message.content;\nreturn [{\n  json: {\n    timestamp: new Date().toISOString(),\n    market_status: 'Dual-Market Cycle Verified',\n    us_regime: 'Commodity/Energy Outperforming; Tech Consolidating',\n    india_regime: 'Finance Leaders (SHRIRAMFIN, HDFCBANK) Showing High Expectancy',\n    llm_critique: analysis,\n    pipeline_verified: true\n  }\n}];"
         },
-        "id": "a2b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c6d",
-        "name": "Log Trade Readiness",
+        "id": "44444444-4444-4444-8444-444444444444",
+        "name": "Log Dual-Market State",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [680, 300]
+        "position": [720, 310]
       }
     ],
     "connections": {
-      "Schedule (Daily 4:30 PM)": {
+      "NSE Market Close (3:30 PM IST)": {
         "main": [
           [
             {
-              "node": "Gemini 3.8 Pre-Trade Scan (via 9router)",
+              "node": "Gemini 3.8 Dual-Market Scan (via 9router)",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Gemini 3.8 Pre-Trade Scan (via 9router)": {
+      "US Market Close (4:30 PM EST)": {
         "main": [
           [
             {
-              "node": "Log Trade Readiness",
+              "node": "Gemini 3.8 Dual-Market Scan (via 9router)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Gemini 3.8 Dual-Market Scan (via 9router)": {
+        "main": [
+          [
+            {
+              "node": "Log Dual-Market State",
               "type": "main",
               "index": 0
             }

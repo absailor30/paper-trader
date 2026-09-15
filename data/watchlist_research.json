@@ -1,0 +1,75 @@
+{
+  "last_updated": "2026-09-15",
+  "market_regime": {
+    "US": "High Volatility / Geopolitical Shock (Brent > $105, AI Capex Pause)",
+    "INDIA": "Post-Holiday Rebound / Selective Sector Divergence (Finance strong, Metals weak)"
+  },
+  "US": [
+    {
+      "Symbol": "XLE",
+      "Sector": "Energy ETF",
+      "Priority": "ACTIVE POSITION",
+      "Catalyst": "Crude oil spiked above $105 due to Middle East supply disruptions; Stage 2 breakout confirmed",
+      "Target Strategy": "SEPA_VCP",
+      "Key Level": "$64.50 breakout pivot"
+    },
+    {
+      "Symbol": "XOM",
+      "Sector": "Integrated Oil",
+      "Priority": "High",
+      "Catalyst": "Free cash flow expansion with elevated refining margins",
+      "Target Strategy": "SEPA_VCP / Stage_Analysis",
+      "Key Level": "$125 support base"
+    },
+    {
+      "Symbol": "NVDA",
+      "Sector": "Semiconductors",
+      "Priority": "Watchlist (Pullback)",
+      "Catalyst": "Pullback on frontier AI safety debate; watching for Mean Reversion oversold bounce",
+      "Target Strategy": "Mean_Reversion",
+      "Key Level": "Lower Bollinger Band ($112)"
+    },
+    {
+      "Symbol": "LMT",
+      "Sector": "Aerospace & Defense",
+      "Priority": "Medium",
+      "Catalyst": "Defense spending commitments and geopolitical hedging demand",
+      "Target Strategy": "CAN_SLIM",
+      "Key Level": "$470 consolidation handle"
+    }
+  ],
+  "INDIA": [
+    {
+      "Symbol": "SHRIRAMFIN.NS",
+      "Sector": "NBFC / Auto Finance",
+      "Priority": "Top Momentum",
+      "Catalyst": "+70% YTD leader; 1.04 Sharpe in backtests; persistent relative strength",
+      "Target Strategy": "Stage_Analysis",
+      "Key Level": "Stage 2 continuation above 20-day EMA"
+    },
+    {
+      "Symbol": "HDFCBANK.NS",
+      "Sector": "Private Banking",
+      "Priority": "High",
+      "Catalyst": "Leading Sep 2026 weekly gainers (+2.08%); credit growth stabilization",
+      "Target Strategy": "SEPA_VCP",
+      "Key Level": "Breakout above multi-month consolidation"
+    },
+    {
+      "Symbol": "DRREDDY.NS",
+      "Sector": "Pharma",
+      "Priority": "Medium (Defensive)",
+      "Catalyst": "Defensive rotation during Nifty volatility; strong export margins",
+      "Target Strategy": "Mean_Reversion",
+      "Key Level": "Support near ₹6,400"
+    },
+    {
+      "Symbol": "TECHM.NS",
+      "Sector": "IT Services",
+      "Priority": "Watchlist",
+      "Catalyst": "Telecom enterprise deal renewals; relative strength vs broader IT pack",
+      "Target Strategy": "CAN_SLIM",
+      "Key Level": "Pivot high breakout"
+    }
+  ]
+}
