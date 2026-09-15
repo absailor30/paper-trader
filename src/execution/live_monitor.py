@@ -18,6 +18,7 @@ from loguru import logger
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.execution.paper_trader import PaperTrader
+from src.notifications import notifier
 from config.config import settings
 
 # Timezones
@@ -119,6 +120,8 @@ def monitor_pass(us_trader: PaperTrader, india_trader: PaperTrader):
             us_exits = us_trader.check_stop_losses()
             if us_exits:
                 logger.warning(f"[US STOP TRIGGERED] Orders: {[x['symbol'] for x in us_exits]}")
+                for order in us_exits:
+                    notifier.send_trade_alert(order, market="US")
             changes = True
 
     # 2. Monitor Indian positions during Indian market hours
@@ -140,6 +143,8 @@ def monitor_pass(us_trader: PaperTrader, india_trader: PaperTrader):
             india_exits = india_trader.check_stop_losses()
             if india_exits:
                 logger.warning(f"[INDIA STOP TRIGGERED] Orders: {[x['symbol'] for x in india_exits]}")
+                for order in india_exits:
+                    notifier.send_trade_alert(order, market="INDIA")
             changes = True
 
     # 3. Save states on changes
@@ -160,9 +165,19 @@ def run_live_monitor():
     us_trader = PaperTrader(initial_capital=settings.us_capital)
     india_trader = PaperTrader(initial_capital=settings.india_capital)
 
+    last_heartbeat = 0
+    heartbeat_interval = getattr(settings, 'telegram_heartbeat_hours', 1) * 3600
+
     while True:
         try:
             market_active = monitor_pass(us_trader, india_trader)
+
+            # Send periodic heartbeat to Telegram
+            now = time.time()
+            if now - last_heartbeat >= heartbeat_interval:
+                notifier.send_heartbeat(us_trader.portfolio.positions, india_trader.portfolio.positions)
+                last_heartbeat = now
+
             if market_active:
                 time.sleep(5)  # 5-second polling during active market hours
             else:

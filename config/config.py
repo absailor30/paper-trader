@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     alpaca_base_url: str = "https://paper-api.alpaca.markets"
     gemini_api_key: str = ""
 
+    # Telegram Alert Settings
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    telegram_heartbeat_hours: int = 1  # Send heartbeat update every N hours
+
     # Risk Parameters
     max_position_size: float = 0.12  # 12% max per position
     max_daily_loss: float = 0.04  # 4% daily loss limit

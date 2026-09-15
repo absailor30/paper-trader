@@ -26,6 +26,31 @@ refresh_interval = st.sidebar.slider("Refresh interval (seconds)", min_value=5, 
 if st.sidebar.button("🔄 Manual Refresh Now"):
     st.rerun()
 
+# Live Monitor Process Health Status
+st.sidebar.markdown("---")
+st.sidebar.header("🛡️ Monitor Daemon")
+def check_monitor_status():
+    log_dir = "logs"
+    if not os.path.exists(log_dir):
+        return "Not Running", "red"
+    logs = [os.path.join(log_dir, f) for f in os.listdir(log_dir) if f.startswith("live_monitor_")]
+    if not logs:
+        return "Not Running", "red"
+    latest_log = max(logs, key=os.path.getmtime)
+    diff = time.time() - os.path.getmtime(latest_log)
+    if diff < 60:
+        return f"Active (Last tick: {int(diff)}s ago)", "green"
+    else:
+        return f"Standby/Idle ({int(diff // 60)}m ago)", "orange"
+
+mon_status, mon_color = check_monitor_status()
+if mon_color == "green":
+    st.sidebar.success(f"● {mon_status}")
+elif mon_color == "orange":
+    st.sidebar.warning(f"● {mon_status}")
+else:
+    st.sidebar.error(f"● {mon_status}")
+
 st.caption(f"Real-time Paper Portfolio & Intelligence Monitor | Last refreshed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 def load_portfolio(filepath: str) -> dict:
