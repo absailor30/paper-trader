@@ -17,7 +17,12 @@ from src.strategies.indicators import sma, rsi, bollinger_bands
 
 def diagnose_indian_universe():
     fetcher = DataFetcher()
-    symbols = ["SHRIRAMFIN", "HDFCBANK", "RELIANCE", "DRREDDY", "TECHM", "KOTAKBANK"]
+    symbols = [
+        "SHRIRAMFIN", "HDFCBANK", "RELIANCE", "DRREDDY", "TECHM", "KOTAKBANK",
+        "TCS", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL", "LT", "AXISBANK",
+        "BAJFINANCE", "NTPC", "TITAN", "HDFCLIFE", "WIPRO", "INDIGO", "ITC",
+        "HINDUNILVR", "SUNPHARMA"
+    ]
 
     strategies = [
         CANSLIMStrategy(),
