@@ -18,3 +18,7 @@ loguru>=0.7.0
 
 # Optional LLM Validation
 google-generativeai>=0.8.0
+
+# Persistence (Postgres-backed portfolio state; falls back to local JSON
+# files when DATABASE_URL is not set)
+psycopg2-binary>=2.9.9

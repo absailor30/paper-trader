@@ -40,8 +40,8 @@ ENV/
 logs/
 *.log
 
-# Data
-data/
+# Data (downloaded datasets only, not source code under src/data/)
+/data/
 *.csv
 *.parquet
 

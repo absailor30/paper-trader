@@ -27,7 +27,8 @@ from src.strategies import (
     SEPAStrategy,
     StageAnalysisStrategy,
     MomentumRLStrategy,
-    MeanReversionStrategy
+    MeanReversionStrategy,
+    Position
 )
 from src.execution.paper_trader import PaperTrader
 
@@ -114,6 +115,69 @@ class TradingBot:
 
         return all_signals
 
+    def dedupe_signals(self, signals: list) -> list:
+        """
+        Collapse multiple strategies signaling the same symbol in one cycle
+        into a single highest-confidence signal, so we never average into
+        one position with several uncoordinated orders per cycle.
+        """
+        best_by_symbol = {}
+        for signal in signals:
+            existing = best_by_symbol.get(signal.symbol)
+            if existing is None or signal.confidence > existing.confidence:
+                best_by_symbol[signal.symbol] = signal
+        return list(best_by_symbol.values())
+
+    def check_strategy_exits(self, data: dict, market: str):
+        """
+        Ask each open position's originating strategy whether it wants out
+        (momentum reversal, RSI extremes, etc.) — should_exit() is defined
+        on every strategy but otherwise never called; live_monitor.py's 5s
+        tick loop only checks fixed stop-loss/take-profit/trailing-stop
+        price levels, not strategy-driven signals.
+        """
+        trader = self.us_trader if market == "US" else self.india_trader
+        strategy_map = {s.name: s for s in self.strategies}
+
+        for symbol, position in list(trader.portfolio.positions.items()):
+            df = data.get(symbol)
+            if df is None or df.empty:
+                continue
+
+            strategy = strategy_map.get(position.get('strategy'))
+            if strategy is None:
+                continue
+
+            current_price = df['close'].iloc[-1]
+            pos_obj = Position(
+                symbol=symbol,
+                quantity=position['quantity'],
+                entry_price=position['entry_price'],
+                current_price=current_price,
+                entry_time=position['entry_time'],
+                strategy_name=position['strategy'],
+                stop_loss=position.get('stop_loss'),
+                take_profit=position.get('take_profit')
+            )
+
+            try:
+                if strategy.should_exit(pos_obj, df):
+                    order = trader.place_order(
+                        symbol=symbol,
+                        side='SELL',
+                        quantity=position['quantity'],
+                        price=current_price,
+                        strategy=position['strategy'],
+                        reasoning=f"{strategy.name}.should_exit triggered"
+                    )
+                    logger.info(f"Strategy exit: {order}")
+                    try:
+                        notifier.send_trade_alert(order, market=market)
+                    except Exception as tg_err:
+                        logger.error(f"Telegram trade alert failed: {tg_err}")
+            except Exception as e:
+                logger.error(f"Error checking should_exit for {symbol}: {e}")
+
     def execute_signals(self, signals: list, market: str, regime: Optional[MarketRegime] = None) -> List[dict]:
         """Execute trading signals with regime filter & LLM validation gate"""
         trader = self.us_trader if market == "US" else self.india_trader
@@ -121,17 +185,23 @@ class TradingBot:
 
         for signal in signals:
             try:
-                # 1. Regime compatibility check
+                # 1. Re-check risk limits before every trade, not just once
+                # per cycle, so a breach mid-batch stops the remaining signals.
+                if not self.check_risk_limits(market):
+                    logger.warning(f"Risk limit breached for {market}; skipping remaining signals this cycle")
+                    break
+
+                # 2. Regime compatibility check
                 if regime and signal.strategy_name not in regime.allowed_strategies:
                     logger.info(f"Filtered {signal.symbol} ({signal.strategy_name}): Not allowed in {regime.regime} regime.")
                     continue
 
-                # 2. Check if already holding position in this symbol
+                # 3. Check if already holding position in this symbol
                 if signal.symbol in trader.portfolio.positions:
                     logger.info(f"Already holding {signal.symbol}. Skipping redundant entry.")
                     continue
 
-                # 3. LLM / Fast-risk validation
+                # 4. LLM / Fast-risk validation
                 validation = self.reasoner.validate_signal_fast(
                     symbol=signal.symbol,
                     signal_type=signal.signal_type.value,
@@ -146,7 +216,7 @@ class TradingBot:
                     logger.warning(f"Trade rejected for {signal.symbol} by Reasoner: {validation.technical_thesis}")
                     continue
 
-                # 4. Calculate position size with regime-based multiplier
+                # 5. Calculate position size with regime-based multiplier
                 multiplier = regime.position_size_multiplier if regime else 1.0
                 position_size = self.calculate_position_size(
                     trader.portfolio.total_value,
@@ -160,7 +230,7 @@ class TradingBot:
                     logger.warning(f"Position size 0 for {signal.symbol} (price: {signal.price}, cash: {trader.portfolio.capital:.2f})")
                     continue
 
-                # 5. Place order
+                # 6. Place order
                 if signal.signal_type.value == "BUY":
                     order = trader.place_order(
                         symbol=signal.symbol,
@@ -211,6 +281,21 @@ class TradingBot:
             if price <= 0:
                 return 0.0
             shares = int(allocated_capital / price)
+            if shares == 0:
+                # 1 share is the minimum indivisible order; allow it up to a
+                # hard 50% single-position concentration ceiling (well above
+                # the normal 12% target, but bounded) rather than always
+                # skipping trades on higher-priced large caps like TCS/
+                # RELIANCE that the 12% target alone can never afford.
+                concentration_ceiling = portfolio_value * 0.5
+                max_affordable = min(available_cash, concentration_ceiling)
+                if price <= max_affordable:
+                    shares = 1
+                else:
+                    logger.warning(
+                        f"India position skipped: 1 share of price {price} exceeds "
+                        f"50% concentration ceiling ({concentration_ceiling:.2f}) or available cash"
+                    )
             return float(shares)
 
     def check_risk_limits(self, market: str) -> bool:
@@ -232,8 +317,9 @@ class TradingBot:
 
     def execute_market_cycle(self, market: str) -> List[dict]:
         """
-        Full autonomous screening and entry execution for one market.
-        Assesses regime, runs strategies, validates setups, and executes buy orders.
+        Full autonomous screening and entry/exit execution for one market.
+        Assesses regime, runs strategies, validates setups, executes buy
+        orders, and evaluates strategy-driven exits on open positions.
         """
         logger.info("=" * 60)
         logger.info(f"AUTONOMOUS {market} TRADING CYCLE STARTED")
@@ -254,19 +340,15 @@ class TradingBot:
         if market == "US":
             regime = self.regime_detector.analyze_us_market()
             symbols = settings.us_stocks
-            data = self.fetcher.fetch_multiple_stocks(
-                symbols,
-                market="US",
-                start_date=(datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
-            )
         else:
             regime = self.regime_detector.analyze_india_market()
             symbols = settings.india_stocks
-            data = self.fetcher.fetch_multiple_stocks(
-                symbols,
-                market="INDIA",
-                start_date=(datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
-            )
+
+        data = self.fetcher.fetch_multiple_stocks(
+            symbols,
+            market=market,
+            start_date=(datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+        )
 
         logger.info(f"[{market} REGIME]: {regime.regime} - {regime.description}")
         logger.info(f"[{market} STRATEGIES ALLOWED]: {regime.allowed_strategies}")
@@ -275,10 +357,16 @@ class TradingBot:
         signals = self.run_strategies(data, market)
         logger.info(f"[{market} SIGNALS GENERATED]: {len(signals)}")
 
-        # 3. Execute approved signals
+        # 3. Collapse multiple strategies firing on the same symbol into one order
+        signals = self.dedupe_signals(signals)
+
+        # 4. Execute approved signals
         executed = self.execute_signals(signals, market, regime=regime)
 
-        # 4. Persist updated portfolio state
+        # 5. Ask each open position's strategy whether it wants to exit
+        self.check_strategy_exits(data, market)
+
+        # 6. Persist updated portfolio state
         self.save_portfolio_states()
 
         logger.info(f"[{market} CYCLE COMPLETED]: {len(executed)} trades executed. Available cash: {trader.portfolio.capital:.2f}")
@@ -324,10 +412,14 @@ class TradingBot:
         except Exception as e:
             logger.error(f"Failed to send EOD Telegram summary: {e}")
 
-    def run_daily_cycle(self):
+    def run_daily_cycle(self) -> Dict[str, list]:
         """Execute both market cycles (used for local testing / CLI)"""
-        self.execute_market_cycle("US")
-        self.execute_market_cycle("INDIA")
+        us_executed = self.execute_market_cycle("US")
+        india_executed = self.execute_market_cycle("INDIA")
+        return {
+            'us_executed': us_executed,
+            'india_executed': india_executed,
+        }
 
     def save_portfolio_states(self):
         """Save portfolio states to disk"""

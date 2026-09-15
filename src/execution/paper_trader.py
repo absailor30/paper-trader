@@ -7,6 +7,9 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 from loguru import logger
 import json
+import os
+
+from src.persistence.state_store import is_db_configured, save_state as db_save_state, load_state as db_load_state
 
 @dataclass
 class Portfolio:
@@ -275,19 +278,41 @@ class PaperTrader:
         self.portfolio.daily_pnl = 0.0
 
     def save_state(self, filepath: str):
-        """Save portfolio state to file"""
+        """
+        Save portfolio state. If DATABASE_URL is configured, persists to
+        Postgres (survives Render redeploys/restarts, which wipe local disk
+        on the free plan); otherwise falls back to a local JSON file.
+        The filepath's basename (e.g. "us_portfolio") is used as the DB key.
+        """
         state = {
             'capital': self.portfolio.capital,
             'positions': self.portfolio.positions,
             'trade_history': self.portfolio.trade_history,
             'orders': self.orders
         }
+
+        if is_db_configured():
+            key = os.path.splitext(os.path.basename(filepath))[0]
+            db_save_state(key, state)
+            return
+
         with open(filepath, 'w') as f:
             json.dump(state, f, indent=2)
         logger.info(f"Portfolio state saved to {filepath}")
 
     def load_state(self, filepath: str):
-        """Load portfolio state from file"""
+        """Load portfolio state from Postgres (if configured) or a local JSON file."""
+        if is_db_configured():
+            key = os.path.splitext(os.path.basename(filepath))[0]
+            state = db_load_state(key)
+            if state is None:
+                return
+            self.portfolio.capital = state['capital']
+            self.portfolio.positions = state['positions']
+            self.portfolio.trade_history = state['trade_history']
+            self.orders = state['orders']
+            return
+
         try:
             with open(filepath, 'r') as f:
                 state = json.load(f)
