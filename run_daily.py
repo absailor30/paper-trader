@@ -7,7 +7,6 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
-from src.data.data_fetcher import DataFetcher
 from src.main import TradingBot
 from loguru import logger
 
@@ -23,16 +22,17 @@ def run_daily_cycle():
     bot = TradingBot()
 
     try:
-        # 1. Fetch market data for current universe
-        logger.info("Fetching market data...")
-        us_data, india_data = bot.fetch_market_data()
+        # Run the full daily cycle (fetch -> signals -> dedupe -> risk-gated
+        # execution -> strategy exits -> stop-loss/take-profit -> save state)
+        # via the single shared implementation in TradingBot, rather than
+        # re-implementing (and drifting from) that logic here.
+        logger.info("Running daily trading cycle...")
+        summary = bot.run_daily_cycle()
 
-        print(f"\nFetched {len(us_data)} US stocks and {len(india_data)} Indian stocks")
-
-        # 2. Generate signals
-        logger.info("Running strategies and generating signals...")
-        us_signals = bot.run_strategies(us_data, "US")
-        india_signals = bot.run_strategies(india_data, "INDIA")
+        us_signals = summary['us_signals']
+        india_signals = summary['india_signals']
+        us_stops = summary['us_stops']
+        india_stops = summary['india_stops']
 
         print(f"\nGenerated {len(us_signals)} signals for US stocks")
         print(f"Generated {len(india_signals)} signals for India stocks")
@@ -47,24 +47,10 @@ def run_daily_cycle():
             for sig in india_signals:
                 print(f"  - {sig.symbol}: {sig.signal_type.value} @ INR {sig.price:.2f} | {sig.reasoning[:80]}...")
 
-        # 3. Execute signals (with LLM validation)
-        logger.info("Executing validated signals...")
-        bot.execute_signals(us_signals, "US")
-        bot.execute_signals(india_signals, "INDIA")
-
-        # 4. Check stop losses
-        logger.info("Checking for stop-loss/take-profit triggers...")
-        us_stops = bot.us_trader.check_stop_losses()
-        india_stops = bot.india_trader.check_stop_losses()
-
         print(f"\n{len(us_stops)} US stop-loss/take-profit executions")
         print(f"{len(india_stops)} India stop-loss/take-profit executions")
 
-        # 5. Save portfolio state
-        logger.info("Saving portfolio states...")
-        bot.save_portfolio_states()
-
-        # 6. Performance summary
+        # Performance summary
         print("\n" + "=" * 70)
         print("DAILY CYCLE COMPLETE - PERFORMANCE SUMMARY")
         print("=" * 70)

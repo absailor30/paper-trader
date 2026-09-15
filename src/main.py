@@ -24,7 +24,8 @@ from src.strategies import (
     SEPAStrategy,
     StageAnalysisStrategy,
     MomentumRLStrategy,
-    MeanReversionStrategy
+    MeanReversionStrategy,
+    Position
 )
 from src.execution.paper_trader import PaperTrader
 
@@ -108,12 +109,31 @@ class TradingBot:
 
         return all_signals
 
+    def dedupe_signals(self, signals: list) -> list:
+        """
+        Collapse multiple strategies signaling the same symbol in one cycle
+        into a single highest-confidence signal, so we never average into
+        one position with several uncoordinated orders per cycle.
+        """
+        best_by_symbol = {}
+        for signal in signals:
+            existing = best_by_symbol.get(signal.symbol)
+            if existing is None or signal.confidence > existing.confidence:
+                best_by_symbol[signal.symbol] = signal
+        return list(best_by_symbol.values())
+
     def execute_signals(self, signals: list, market: str):
         """Execute trading signals with LLM validation gate"""
         trader = self.us_trader if market == "US" else self.india_trader
 
         for signal in signals:
             try:
+                # Re-check risk limits before every trade, not just once per
+                # cycle, so a breach mid-batch stops the remaining signals.
+                if not self.check_risk_limits(market):
+                    logger.warning(f"Risk limit breached for {market}; skipping remaining signals this cycle")
+                    break
+
                 # LLM / Fast-risk validation
                 validation = self.reasoner.validate_signal_fast(
                     symbol=signal.symbol,
@@ -180,8 +200,27 @@ class TradingBot:
             shares = round(allocated_capital / price, 4)
             return shares
         else:
-            # India integer shares
+            # India integer shares. A strict 12% allocation rounds down to 0
+            # shares for higher-priced large caps (e.g. TCS, RELIANCE) even
+            # though the portfolio could afford 1 share, so fall back to a
+            # single share as long as it stays within a widened concentration
+            # cap (2x the normal max position size) rather than skip the trade.
             shares = int(allocated_capital / price)
+            if shares == 0:
+                # 1 share is the minimum indivisible order; allow it up to a
+                # hard 50% single-position concentration ceiling (well above
+                # the normal 12% target, but bounded) rather than always
+                # skipping trades on higher-priced large caps like TCS/
+                # RELIANCE that the 12% target alone can never afford.
+                concentration_ceiling = portfolio_value * 0.5
+                max_affordable = min(available_cash, concentration_ceiling)
+                if price <= max_affordable:
+                    shares = 1
+                else:
+                    logger.warning(
+                        f"India position skipped: 1 share of price {price} exceeds "
+                        f"50% concentration ceiling ({concentration_ceiling:.2f}) or available cash"
+                    )
             return float(shares)
 
     def check_risk_limits(self, market: str):
@@ -201,6 +240,50 @@ class TradingBot:
 
         return True
 
+    def check_strategy_exits(self, data: dict, market: str):
+        """
+        Ask each open position's originating strategy whether it wants out
+        (momentum reversal, RSI extremes, etc.) — previously should_exit()
+        was defined on every strategy but never called anywhere.
+        """
+        trader = self.us_trader if market == "US" else self.india_trader
+        strategy_map = {s.name: s for s in self.strategies}
+
+        for symbol, position in list(trader.portfolio.positions.items()):
+            df = data.get(symbol)
+            if df is None or df.empty:
+                continue
+
+            strategy = strategy_map.get(position.get('strategy'))
+            if strategy is None:
+                continue
+
+            current_price = df['close'].iloc[-1]
+            pos_obj = Position(
+                symbol=symbol,
+                quantity=position['quantity'],
+                entry_price=position['entry_price'],
+                current_price=current_price,
+                entry_time=position['entry_time'],
+                strategy_name=position['strategy'],
+                stop_loss=position.get('stop_loss'),
+                take_profit=position.get('take_profit')
+            )
+
+            try:
+                if strategy.should_exit(pos_obj, df):
+                    order = trader.place_order(
+                        symbol=symbol,
+                        side='SELL',
+                        quantity=position['quantity'],
+                        price=current_price,
+                        strategy=position['strategy'],
+                        reasoning=f"{strategy.name}.should_exit triggered"
+                    )
+                    logger.info(f"Strategy exit: {order}")
+            except Exception as e:
+                logger.error(f"Error checking should_exit for {symbol}: {e}")
+
     def run_daily_cycle(self):
         """Run daily trading cycle"""
         logger.info("=" * 50)
@@ -219,14 +302,23 @@ class TradingBot:
         india_signals = self.run_strategies(india_data, "INDIA")
         logger.info(f"Total India signals: {len(india_signals)}")
 
-        # Check risk limits
+        # Collapse multiple strategies firing on the same symbol into one order
+        us_signals = self.dedupe_signals(us_signals)
+        india_signals = self.dedupe_signals(india_signals)
+
+        # Check risk limits (also re-checked per-trade inside execute_signals)
         if self.check_risk_limits("US"):
             self.execute_signals(us_signals, "US")
 
         if self.check_risk_limits("INDIA"):
             self.execute_signals(india_signals, "INDIA")
 
-        # Check stop losses
+        # Ask each position's strategy whether it wants to exit
+        logger.info("Checking strategy-driven exits...")
+        self.check_strategy_exits(us_data, "US")
+        self.check_strategy_exits(india_data, "INDIA")
+
+        # Check stop losses / take profits
         logger.info("Checking stop losses...")
         us_stops = self.us_trader.check_stop_losses()
         india_stops = self.india_trader.check_stop_losses()
@@ -240,6 +332,13 @@ class TradingBot:
 
         # Save state
         self.save_portfolio_states()
+
+        return {
+            'us_signals': us_signals,
+            'india_signals': india_signals,
+            'us_stops': us_stops,
+            'india_stops': india_stops,
+        }
 
     def save_portfolio_states(self):
         """Save portfolio states"""
