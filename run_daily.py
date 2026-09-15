@@ -86,6 +86,27 @@ def run_daily_cycle():
 
         print("\n" + "=" * 70)
 
+        # 7. Generate Daily LLM Reflection & Post-Mortem
+        logger.info("Generating autonomous post-session reflection...")
+        reflection_us = bot.reasoner.generate_daily_reflection(
+            trades_today=bot.us_trader.portfolio.trade_history,
+            portfolio_metrics=us_metrics,
+            market="US Equities"
+        )
+        reflection_india = bot.reasoner.generate_daily_reflection(
+            trades_today=bot.india_trader.portfolio.trade_history,
+            portfolio_metrics=india_metrics,
+            market="Indian Equities (NSE)"
+        )
+
+        reflections_path = "logs/daily_reflections.md"
+        with open(reflections_path, "a", encoding="utf-8") as f:
+            f.write(f"\n\n---\n*Recorded on {now_str}*\n\n")
+            f.write(reflection_us + "\n\n")
+            f.write(reflection_india + "\n")
+
+        print("\n[AI Reflection Generated and Saved to logs/daily_reflections.md]")
+
     except Exception as e:
         logger.error(f"Error during daily cycle: {e}")
         import traceback

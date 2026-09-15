@@ -39,9 +39,16 @@ class PaperTrader:
     Handles order execution, position management, P&L tracking
     """
 
-    def __init__(self, initial_capital: float = 100.0):
+    def __init__(
+        self,
+        initial_capital: float = 100.0,
+        commission_rate: float = 0.001,  # 0.1% commission
+        slippage_rate: float = 0.0005     # 0.05% slippage
+    ):
         self.portfolio = Portfolio(capital=initial_capital)
         self.initial_capital = initial_capital
+        self.commission_rate = commission_rate
+        self.slippage_rate = slippage_rate
         self.orders = []
         self.daily_start_value = initial_capital
 
@@ -61,11 +68,17 @@ class PaperTrader:
 
         Returns order result
         """
+        # Apply slippage to execution price
+        effective_price = price * (1 + self.slippage_rate) if side == 'BUY' else price * (1 - self.slippage_rate)
+        commission = (quantity * effective_price) * self.commission_rate
+
         order = {
             'symbol': symbol,
             'side': side,
             'quantity': quantity,
-            'price': price,
+            'price': effective_price,
+            'raw_price': price,
+            'commission': commission,
             'strategy': strategy,
             'stop_loss': stop_loss,
             'take_profit': take_profit,
@@ -75,16 +88,16 @@ class PaperTrader:
         }
 
         if side == 'BUY':
-            # Check capital
-            cost = quantity * price
-            if cost > self.portfolio.capital:
-                logger.warning(f"Insufficient capital for {symbol} buy order")
+            # Check capital including commission
+            total_cost = (quantity * effective_price) + commission
+            if total_cost > self.portfolio.capital:
+                logger.warning(f"Insufficient capital for {symbol} buy order (required: {total_cost:.2f}, avail: {self.portfolio.capital:.2f})")
                 order['status'] = 'REJECTED'
                 order['reason'] = 'Insufficient capital'
                 return order
 
             # Deduct capital
-            self.portfolio.capital -= cost
+            self.portfolio.capital -= total_cost
 
             # Add position
             if symbol in self.portfolio.positions:
@@ -92,13 +105,13 @@ class PaperTrader:
                 existing = self.portfolio.positions[symbol]
                 total_qty = existing['quantity'] + quantity
                 avg_price = (
-                    (existing['quantity'] * existing['entry_price'] + quantity * price)
+                    (existing['quantity'] * existing['entry_price'] + quantity * effective_price)
                     / total_qty
                 )
                 self.portfolio.positions[symbol] = {
                     'quantity': total_qty,
                     'entry_price': avg_price,
-                    'current_price': price,
+                    'current_price': effective_price,
                     'entry_time': datetime.now().isoformat(),
                     'strategy': strategy,
                     'stop_loss': stop_loss,
@@ -107,8 +120,8 @@ class PaperTrader:
             else:
                 self.portfolio.positions[symbol] = {
                     'quantity': quantity,
-                    'entry_price': price,
-                    'current_price': price,
+                    'entry_price': effective_price,
+                    'current_price': effective_price,
                     'entry_time': datetime.now().isoformat(),
                     'strategy': strategy,
                     'stop_loss': stop_loss,
@@ -125,23 +138,28 @@ class PaperTrader:
 
             position = self.portfolio.positions[symbol]
 
-            # Calculate P&L
-            pnl = (price - position['entry_price']) * quantity
-            proceeds = quantity * price
+            # Calculate gross proceeds & net of commission
+            gross_proceeds = quantity * effective_price
+            net_proceeds = gross_proceeds - commission
+            cost_basis = position['entry_price'] * quantity
+            net_pnl = net_proceeds - cost_basis
 
             # Add to capital
-            self.portfolio.capital += proceeds
-            self.portfolio.daily_pnl += pnl
+            self.portfolio.capital += net_proceeds
+            self.portfolio.daily_pnl += net_pnl
 
-            # Record trade
+            # Record trade in trade journal
             trade = {
                 'symbol': symbol,
                 'side': 'SELL',
                 'quantity': quantity,
                 'entry_price': position['entry_price'],
-                'exit_price': price,
-                'pnl': pnl,
-                'pnl_pct': pnl / (position['entry_price'] * quantity) * 100,
+                'exit_price': effective_price,
+                'raw_exit_price': price,
+                'commission': commission,
+                'gross_pnl': (effective_price - position['entry_price']) * quantity,
+                'pnl': net_pnl,
+                'pnl_pct': (net_pnl / cost_basis) * 100 if cost_basis > 0 else 0,
                 'strategy': strategy,
                 'entry_time': position['entry_time'],
                 'exit_time': datetime.now().isoformat(),

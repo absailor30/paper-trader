@@ -69,9 +69,10 @@ for sym, pos in india_pf.get("positions", {}).items():
     if live_p:
         pos["current_price"] = live_p
 
-tab_us, tab_india, tab_watchlist, tab_benchmark = st.tabs([
+tab_us, tab_india, tab_reflections, tab_watchlist, tab_benchmark = st.tabs([
     "🇺🇸 US Stocks ($100)",
     "🇮🇳 Indian Stocks (₹10,000)",
+    "🧠 Daily AI Reflections",
     "🔭 Stock Research & Watchlist",
     "📊 Strategy Benchmarks",
 ])
@@ -158,6 +159,17 @@ with tab_india:
         st.dataframe(pd.DataFrame(in_pos_data), use_container_width=True)
     else:
         st.info("No active Indian positions. Cash standing by for high-expectancy setups.")
+
+# ----------------- REFLECTIONS TAB -----------------
+with tab_reflections:
+    st.subheader("Autonomous Post-Session Reflections & Learning Journal")
+    refl_file = "logs/daily_reflections.md"
+    if os.path.exists(refl_file):
+        with open(refl_file, "r", encoding="utf-8") as f:
+            refl_text = f.read()
+        st.markdown(refl_text)
+    else:
+        st.info("Daily reflections will appear here after the market close execution cycle.")
 
 # ----------------- WATCHLIST TAB -----------------
 with tab_watchlist:
