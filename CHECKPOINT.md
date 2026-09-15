@@ -94,12 +94,31 @@ behaves exactly as before.
 
 ---
 
-### 4. System components (unchanged from before, for reference)
+### 4. Autonomous Market Understanding, Trading & Risk Engine (new this session, merged with the fixes above)
 
-- **Live Risk Daemon** (`src/execution/live_monitor.py`): 5s tick polling
-  during active market hours (NSE 09:15–15:30 IST, US 09:30–16:00 EST),
-  evaluates stop-loss/take-profit. Halts polling off-hours; runs
-  pre-market research at 06:00 IST.
+A second, independent set of changes landed on `main` in parallel with the
+bug-fix work above (regime detection, trailing stops, scheduled entry/exit
+cycles). Both were merged together — the bug fixes apply throughout this
+new architecture, not instead of it.
+
+- **Market Regime Detection (`src/intelligence/market_regime.py`)**:
+  classifies US (SPY, QQQ, VIX) and India (^NSEI, India VIX) into 4 macro
+  states (`BULL_MOMENTUM`, `SIDEWAYS_CONSOLIDATION`, `BEAR_DOWNTREND`,
+  `HIGH_VOLATILITY`), blocks breakout strategies in bear/choppy regimes,
+  and scales position sizing (0.5x–1.0x) by regime.
+- **`TradingBot.execute_market_cycle(market)`** (`src/main.py`): the
+  per-market entry point — regime analysis, strategy signals, de-dupe
+  (this session's fix), risk-gated execution with regime/already-holding
+  filters, then `check_strategy_exits()` (this session's fix — routes each
+  open position through the strategy that opened it, not just fixed
+  stop-loss/take-profit levels).
+- **Dynamic Trailing Stop** (`src/execution/paper_trader.py`): activates
+  at +10% gain, ratchets the stop up to 5% below peak price, never down.
+- **24/7 Cloud Daemon (`src/execution/live_monitor.py`)**: 06:00 IST
+  pre-market research; 09:35 IST / 09:45 EST autonomous entry cycles;
+  15:35 IST / 16:05 EST EOD reflection + Telegram summary; continuous 5s
+  ticks for live price, trailing-stop ratchet, and stop-loss/take-profit
+  exits; hourly heartbeat.
 - **Pre-Market Research** (`src/intelligence/premarket_research.py`):
   macro regime scan, Stage 2 / mean-reversion screening, Telegram
   briefing. (Was broken by the missing `DataFetcher`; fixed alongside it.)

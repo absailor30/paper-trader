@@ -22,33 +22,25 @@ def run_daily_cycle():
     bot = TradingBot()
 
     try:
-        # Run the full daily cycle (fetch -> signals -> dedupe -> risk-gated
-        # execution -> strategy exits -> stop-loss/take-profit -> save state)
-        # via the single shared implementation in TradingBot, rather than
+        # Run both market cycles (regime analysis -> signals -> dedupe ->
+        # risk-gated execution -> strategy exits -> save state) via the
+        # single shared implementation in TradingBot, rather than
         # re-implementing (and drifting from) that logic here.
         logger.info("Running daily trading cycle...")
         summary = bot.run_daily_cycle()
 
-        us_signals = summary['us_signals']
-        india_signals = summary['india_signals']
-        us_stops = summary['us_stops']
-        india_stops = summary['india_stops']
+        us_executed = summary['us_executed']
+        india_executed = summary['india_executed']
 
-        print(f"\nGenerated {len(us_signals)} signals for US stocks")
-        print(f"Generated {len(india_signals)} signals for India stocks")
+        print(f"\n{len(us_executed)} US orders executed")
+        if us_executed:
+            for order in us_executed:
+                print(f"  - {order['symbol']}: {order['side']} {order['quantity']} @ ${order['price']:.2f}")
 
-        if us_signals:
-            print("\nUS Signals:")
-            for sig in us_signals:
-                print(f"  - {sig.symbol}: {sig.signal_type.value} @ ${sig.price:.2f} | {sig.reasoning[:80]}...")
-
-        if india_signals:
-            print("\nIndia Signals:")
-            for sig in india_signals:
-                print(f"  - {sig.symbol}: {sig.signal_type.value} @ INR {sig.price:.2f} | {sig.reasoning[:80]}...")
-
-        print(f"\n{len(us_stops)} US stop-loss/take-profit executions")
-        print(f"{len(india_stops)} India stop-loss/take-profit executions")
+        print(f"\n{len(india_executed)} India orders executed")
+        if india_executed:
+            for order in india_executed:
+                print(f"  - {order['symbol']}: {order['side']} {order['quantity']} @ INR {order['price']:.2f}")
 
         # Performance summary
         print("\n" + "=" * 70)
@@ -72,26 +64,14 @@ def run_daily_cycle():
 
         print("\n" + "=" * 70)
 
-        # 7. Generate Daily LLM Reflection & Post-Mortem
-        logger.info("Generating autonomous post-session reflection...")
-        reflection_us = bot.reasoner.generate_daily_reflection(
-            trades_today=bot.us_trader.portfolio.trade_history,
-            portfolio_metrics=us_metrics,
-            market="US Equities"
-        )
-        reflection_india = bot.reasoner.generate_daily_reflection(
-            trades_today=bot.india_trader.portfolio.trade_history,
-            portfolio_metrics=india_metrics,
-            market="Indian Equities (NSE)"
-        )
+        # Record daily reflection + Telegram EOD summary for both markets
+        # (TradingBot.record_daily_reflection, shared with live_monitor.py's
+        # scheduled EOD calls, rather than a separate reflection path here).
+        logger.info("Recording daily reflections...")
+        bot.record_daily_reflection("US")
+        bot.record_daily_reflection("INDIA")
 
-        reflections_path = "logs/daily_reflections.md"
-        with open(reflections_path, "a", encoding="utf-8") as f:
-            f.write(f"\n\n---\n*Recorded on {now_str}*\n\n")
-            f.write(reflection_us + "\n\n")
-            f.write(reflection_india + "\n")
-
-        print("\n[AI Reflection Generated and Saved to logs/daily_reflections.md]")
+        print("\n[Daily Reflections Recorded to logs/daily_reflections.md]")
 
     except Exception as e:
         logger.error(f"Error during daily cycle: {e}")

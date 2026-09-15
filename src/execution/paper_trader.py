@@ -182,10 +182,25 @@ class PaperTrader:
         return order
 
     def update_prices(self, prices: Dict[str, float]):
-        """Update current prices for all positions"""
+        """Update current prices for all positions and ratchet trailing stops"""
+        trailing_trigger = getattr(settings, 'trailing_stop_trigger', 0.10)
+
         for symbol, price in prices.items():
             if symbol in self.portfolio.positions:
-                self.portfolio.positions[symbol]['current_price'] = price
+                pos = self.portfolio.positions[symbol]
+                pos['current_price'] = price
+                entry = pos.get('entry_price', price)
+                highest = max(pos.get('highest_price', entry), price)
+                pos['highest_price'] = highest
+
+                # Dynamic Trailing Stop: lock in profit once threshold is crossed
+                if highest >= entry * (1.0 + trailing_trigger):
+                    new_sl = round(highest * 0.95, 2)  # 5% trail below peak
+                    current_sl = pos.get('stop_loss', 0)
+                    if new_sl > current_sl:
+                        pos['stop_loss'] = new_sl
+                        lock_gain = ((new_sl - entry) / entry) * 100
+                        logger.info(f"Ratcheted trailing stop for {symbol} to {new_sl:.2f} (Locking in minimum {lock_gain:+.1f}% profit)")
 
     def check_stop_losses(self) -> List[dict]:
         """Check and execute stop losses"""

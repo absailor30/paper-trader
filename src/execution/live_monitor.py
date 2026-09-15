@@ -1,15 +1,17 @@
 """
-Continuous background price monitor and auto-exit manager.
-Polls live prices for active positions every 5 seconds ONLY during active market hours:
-- Indian Market (NSE/BSE): 09:15 to 15:30 IST (Monday - Friday)
-- US Market (NYSE/NASDAQ): 09:30 to 16:00 EST/EDT (Monday - Friday)
-
-Outside market hours:
-- Fully halts 5-second polling to conserve compute and avoid rate limits.
-- Calculates exact remaining seconds until 06:00:00 AM IST.
-- At 06:00 AM IST: executes pre-market quantitative screening, updates watchlist,
-  and dispatches daily morning intelligence digest to Telegram.
-- Re-enters monitor mode before 09:15 IST opening bell.
+Autonomous Real-Time Price Monitor, Strategy Executor & Risk Daemon.
+Runs 24/7 in cloud container:
+- 06:00 AM IST: Pre-market global macro screening & watchlist research.
+- 09:35 AM IST: Autonomous Indian market regime analysis & trade entries.
+- 15:35 IST: Indian market close EOD reflection & performance report.
+- 09:45 AM EST: Autonomous US market regime analysis & trade entries.
+- 16:05 EST: US market close EOD reflection & performance report.
+- Continuous 5-second tick loop during market hours:
+  - Real-time mark-to-market prices.
+  - Automatic dynamic trailing stop ratchet (+10% gain -> trail 5% below peak).
+  - Instant stop-loss (-6%) and take-profit auto-execution.
+  - Instant Telegram trade alerts.
+  - Hourly status heartbeat to Telegram.
 """
 import sys
 import os
@@ -22,6 +24,7 @@ from loguru import logger
 # Add project root to sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from src.main import TradingBot
 from src.execution.paper_trader import PaperTrader
 from src.notifications import notifier
 from src.intelligence.premarket_research import run_premarket_research
@@ -108,7 +111,7 @@ def monitor_pass(us_trader: PaperTrader, india_trader: PaperTrader) -> bool:
             p = fetch_live_price(sym)
             if p:
                 us_prices[sym] = p
-                entry = pos['entry_price']
+                entry = pos.get('entry_price', p)
                 sl = pos.get('stop_loss', 0)
                 tp = pos.get('take_profit', 0)
                 pnl_pct = ((p - entry) / entry) * 100 if entry > 0 else 0
@@ -131,7 +134,7 @@ def monitor_pass(us_trader: PaperTrader, india_trader: PaperTrader) -> bool:
             p = fetch_live_price(fetch_sym)
             if p:
                 in_prices[sym] = p
-                entry = pos['entry_price']
+                entry = pos.get('entry_price', p)
                 sl = pos.get('stop_loss', 0)
                 tp = pos.get('take_profit', 0)
                 pnl_pct = ((p - entry) / entry) * 100 if entry > 0 else 0
@@ -152,67 +155,93 @@ def monitor_pass(us_trader: PaperTrader, india_trader: PaperTrader) -> bool:
 
     return True
 
-def seconds_until_6am_ist() -> float:
-    """Calculate exact seconds until next 06:00:00 AM IST"""
-    now_ist = datetime.now(TZ_INDIA)
-    target = now_ist.replace(hour=6, minute=0, second=0, microsecond=0)
-    if now_ist >= target:
-        target += timedelta(days=1)
-    return (target - now_ist).total_seconds()
-
 def run_live_monitor():
-    """Main loop: 5s poll during market hours, scheduled 6 AM IST research when closed"""
+    """Main loop: 24/7 autonomous scheduling and real-time risk monitor"""
     logger.info("=" * 65)
-    logger.info("AUTONOMOUS REAL-TIME PRICE & RISK MONITOR LAUNCHED")
-    logger.info("Active Market Polling: 5 seconds")
+    logger.info("AUTONOMOUS AI TRADING AGENT - 24/7 CLOUD DAEMON")
+    logger.info("Market Regime Analysis | Autonomous Entry & Exit | Trailing Stops")
     logger.info("NSE Hours: 09:15 - 15:30 IST | US Hours: 09:30 - 16:00 EST")
-    logger.info("Off-Market Schedule: Sleep until 06:00 AM IST for autonomous research")
     logger.info("=" * 65)
 
-    us_trader = PaperTrader(initial_capital=settings.us_capital)
-    india_trader = PaperTrader(initial_capital=settings.india_capital)
+    bot = TradingBot()
+    us_trader = bot.us_trader
+    india_trader = bot.india_trader
 
     last_heartbeat = 0
     heartbeat_interval = getattr(settings, 'telegram_heartbeat_hours', 1) * 3600
     last_research_date = None
+    last_india_entry_date = None
+    last_india_eod_date = None
+    last_us_entry_date = None
+    last_us_eod_date = None
 
     while True:
         try:
-            market_active = monitor_pass(us_trader, india_trader)
-
             now_ist = datetime.now(TZ_INDIA)
-            current_date_ist = now_ist.strftime('%Y-%m-%d')
+            now_us = datetime.now(TZ_US)
+            date_ist = now_ist.strftime('%Y-%m-%d')
+            date_us = now_us.strftime('%Y-%m-%d')
 
-            # Trigger 6:00 AM IST research once per calendar day
-            if now_ist.hour == 6 and now_ist.minute < 15 and last_research_date != current_date_ist:
+            # 1. 06:00 AM IST: Pre-Market Global Macro Screening
+            if now_ist.hour == 6 and now_ist.minute < 15 and last_research_date != date_ist:
                 logger.info("06:00 AM IST reached. Executing autonomous pre-market research routine.")
                 try:
                     run_premarket_research()
-                    last_research_date = current_date_ist
+                    last_research_date = date_ist
                 except Exception as res_err:
                     logger.error(f"Pre-market research error: {res_err}")
 
+            # 2. 09:35 AM IST: Indian Market Autonomous Entry Cycle
+            if now_ist.weekday() < 5 and now_ist.hour == 9 and 35 <= now_ist.minute <= 50 and last_india_entry_date != date_ist:
+                logger.info("09:35 AM IST reached. Running autonomous Indian market entry cycle.")
+                try:
+                    bot.execute_market_cycle("INDIA")
+                    last_india_entry_date = date_ist
+                except Exception as in_err:
+                    logger.error(f"Indian market entry cycle error: {in_err}")
+
+            # 3. 15:35 IST: Indian Market Close EOD Reflection
+            if now_ist.weekday() < 5 and now_ist.hour == 15 and 35 <= now_ist.minute <= 50 and last_india_eod_date != date_ist:
+                logger.info("15:35 IST reached. Recording Indian market EOD reflection.")
+                try:
+                    bot.record_daily_reflection("INDIA")
+                    last_india_eod_date = date_ist
+                except Exception as in_eod_err:
+                    logger.error(f"Indian market EOD reflection error: {in_eod_err}")
+
+            # 4. 09:45 AM EST: US Market Autonomous Entry Cycle
+            if now_us.weekday() < 5 and now_us.hour == 9 and 45 <= now_us.minute <= 59 and last_us_entry_date != date_us:
+                logger.info("09:45 AM EST reached. Running autonomous US market entry cycle.")
+                try:
+                    bot.execute_market_cycle("US")
+                    last_us_entry_date = date_us
+                except Exception as us_err:
+                    logger.error(f"US market entry cycle error: {us_err}")
+
+            # 5. 16:05 EST: US Market Close EOD Reflection
+            if now_us.weekday() < 5 and now_us.hour == 16 and 5 <= now_us.minute <= 20 and last_us_eod_date != date_us:
+                logger.info("16:05 EST reached. Recording US market EOD reflection.")
+                try:
+                    bot.record_daily_reflection("US")
+                    last_us_eod_date = date_us
+                except Exception as us_eod_err:
+                    logger.error(f"US market EOD reflection error: {us_eod_err}")
+
+            # 6. Intraday price monitoring & trailing stops (5s ticks during active hours)
+            market_active = monitor_pass(us_trader, india_trader)
+
             if market_active:
-                # Active market polling
                 now = time.time()
                 if now - last_heartbeat >= heartbeat_interval:
                     notifier.send_heartbeat(us_trader.portfolio.positions, india_trader.portfolio.positions)
                     last_heartbeat = now
                 time.sleep(5)
             else:
-                # Both markets closed: do not poll prices
-                sleep_secs = seconds_until_6am_ist()
-                # If within 15 minutes of 6am, sleep in short 30s checks so we hit the window cleanly
-                if sleep_secs > 900:
-                    hours_rem = sleep_secs / 3600
-                    logger.info(f"Markets closed. Halting price polling. Sleeping {hours_rem:.2f} hrs until 06:00 AM IST research.")
-                    # Sleep in 60s intervals to remain responsive to interruptions and state changes
-                    time.sleep(60)
-                else:
-                    time.sleep(30)
+                # Outside active market hours: sleep 30s to keep loop responsive
+                time.sleep(30)
 
         except Exception as e:
-            logger.error(f"Error in monitor loop: {e}")
+            logger.error(f"Error in autonomous live monitor loop: {e}")
             time.sleep(10)
 
 if __name__ == "__main__":
