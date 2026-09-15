@@ -59,10 +59,11 @@
 
 ---
 
-### 5. Cloud Deployment Configuration (Render / VPS)
-- `Dockerfile`: Python 3.11-slim container with supervisor daemon runner.
-- `supervisord.conf`: auto-manages both `live_monitor.py` and `dashboard.py` in background with auto-restart on crashes.
-- `docker-compose.yml`: persistent volume mounts for `./logs` and `./data`.
-- `render.yaml`: infrastructure-as-code manifest for Render Free Web Service deployment.
-- `deploy.sh`: one-line provisioning script for fresh Ubuntu EC2 / VPS servers.
+### 5. Cloud Deployment & 24/7 Production Setup
+- **Platform**: Render (Web Service, Docker Runtime)
+- **Container**: Python 3.11-slim orchestrated via `supervisord.conf`
+  - Worker 1: `live_monitor.py` (5s active hours risk tick + off-hours 06:00 AM IST scheduler)
+  - Worker 2: Streamlit Live Dashboard (`0.0.0.0:8501`)
+- **Keep-Alive Uptime**: cron-job.org scheduled HTTP GET every 10 minutes to `/_stcore/health` to eliminate free tier sleep.
+- **Local Independence**: Fully cloud-hosted. Terminal, CMD, and local laptop can be closed without interrupting trading or monitoring.
 - **Git Status**: Pushed to `origin/main` at `https://github.com/absailor30/paper-trader.git`.
