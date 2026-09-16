@@ -116,26 +116,38 @@ are the two worth refining further before Trend Following.
 
 | Strategy | Universe | Result | Validated? |
 |---|---|---|---|
-| Momentum Rotation (top-5, 126d lookback, 21d rebalance) | US (widened) | +60.29% vs +117.00% benchmark, Sharpe 0.63, max DD -23.82% — run **before** the insufficient-capital bug fix, needs re-run | No |
-| Momentum Rotation | India | +2.13% vs +49.88% benchmark, Sharpe 0.10, max DD -22.45% — same caveat, needs re-run | No |
+| Momentum Rotation (top-5, 126d lookback, 21d rebalance) | US (widened) | **+143.37%** vs +116.10% benchmark, CAGR +21.91%, Sharpe 0.98, max DD -28.87%, 54 rebalances, 523 trades — re-run **after** the insufficient-capital bug fix | **YES — POSITIVE EDGE** |
+| Momentum Rotation | India | +5.24% vs +49.88% benchmark, CAGR +1.15%, Sharpe 0.15, max DD -25.08%, 53 rebalances, 496 trades — re-run after fix | No |
 
-Rotation still needs a re-run post-fix (see bug log) — not yet included
-in the comparison above.
+**This is the first validated strategy in the rebuild.** The capital-allocation
+fix flipped the US verdict: pre-fix it returned +60.29% vs a +117.00%
+benchmark (not validated, lost to buy-and-hold); post-fix, with orders no
+longer being spuriously rejected mid-rebalance, it returns +143.37% vs a
++116.10% benchmark — the strategy now actually holds the positions its logic
+selects instead of silently missing fills, and that alone was enough to beat
+the benchmark. India stays not validated — same fix applied, still a real
+gap (+5.24% vs +49.88%), so the edge there (if any) is universe-specific, not
+a residual bug.
 
 ## Next steps (in order)
 
-1. Re-run `python run.py rotation` (both universes) now that the
-   insufficient-capital allocation bug is fixed, to get a clean number —
-   the ones in the table above were measured with the bug present.
-2. Decide whether to iterate on Donchian (best profit factor) or Mean
-   Reversion (best win rate/drawdown) — e.g. tighter entry filters,
-   different lookback/exit periods — since neither is validated as-is
-   but both show more promise than Trend Following.
-3. Once at least one strategy is validated on real data with a clean
-   aggregate table: run `python run.py cycle` in propose-only mode for a
-   while and sanity-check proposals before flipping `AUTO_EXECUTE=true`.
-4. Only after that: decide whether/what to merge into `main`, and
-   whether to re-add Telegram/dashboard/deployment on top.
+1. ~~Re-run `python run.py rotation` post-fix~~ — done, see above. US rotation
+   validated; India did not.
+2. Sanity-check US Momentum Rotation isn't a one-window fluke: rotation was
+   already validated on a single 2022-2026 run — worth confirming the result
+   holds before treating it as trustworthy (e.g. re-check trade log for any
+   remaining silent-rejection artifacts, consider a second date range if
+   feasible).
+3. Decide whether to iterate on Donchian (best profit factor among the
+   single-symbol strategies) or Mean Reversion (best win rate/drawdown) —
+   neither is validated as-is but both show more promise than Trend
+   Following.
+4. Once US Momentum Rotation's result is double-checked: run `python run.py
+   cycle` in propose-only mode for a while and sanity-check proposals before
+   flipping `AUTO_EXECUTE=true` for that strategy specifically (not the
+   others — they're still unvalidated).
+5. Only after that: decide whether/what to merge into `main`, and whether to
+   re-add Telegram/dashboard/deployment on top.
 
 ## Bug log (rebuild/v2)
 
