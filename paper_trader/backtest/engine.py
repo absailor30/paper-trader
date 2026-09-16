@@ -38,8 +38,21 @@ class BacktestResult:
     win_rate: float
     profit_factor: float
 
+    def is_validated(self) -> bool:
+        # Beating buy-and-hold on a falling stock (e.g. return -2%, benchmark
+        # -20%) is not "edge" -- it's losing less than a bad benchmark. A
+        # verdict must actually make money, not just outscore the comparison.
+        # This is the single source of truth for "validated" -- callers
+        # (run_backtest.py's per-symbol and aggregate counts, this summary)
+        # must use it rather than re-deriving the same condition themselves.
+        return (
+            self.total_return_pct > self.benchmark_return_pct
+            and self.total_return_pct > 0
+            and self.num_trades >= 5
+        )
+
     def summary(self) -> str:
-        verdict = "POSITIVE EDGE" if self.total_return_pct > self.benchmark_return_pct and self.num_trades >= 5 else "NOT VALIDATED"
+        verdict = "POSITIVE EDGE" if self.is_validated() else "NOT VALIDATED"
         return (
             f"[{verdict}] {self.strategy_name} on {self.symbol} "
             f"({self.start_date} to {self.end_date}): "

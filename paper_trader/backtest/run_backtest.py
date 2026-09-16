@@ -41,8 +41,8 @@ def main():
                 results.append(result)
                 print(result.summary())
 
-            validated = [r for r in results if r.total_return_pct > r.benchmark_return_pct and r.num_trades >= 5]
-            print(f"\n{len(validated)}/{len(results)} {market} symbols beat buy-and-hold with >=5 trades.")
+            validated = [r for r in results if r.is_validated()]
+            print(f"\n{len(validated)}/{len(results)} {market} symbols validated (profitable and beat buy-and-hold, >=5 trades).")
             all_results.extend(results)
 
     print("\n" + "=" * 70)
@@ -58,10 +58,10 @@ def main():
     for strategy in STRATEGIES:
         strategy_results = [r for r in all_results if r.strategy_name == strategy.name]
         traded = [r for r in strategy_results if r.num_trades >= 5]
-        validated = [r for r in strategy_results if r.total_return_pct > r.benchmark_return_pct and r.num_trades >= 5]
+        validated = [r for r in strategy_results if r.is_validated()]
 
         print(f"{strategy.name}:")
-        print(f"  {len(validated)}/{len(strategy_results)} symbols beat buy-and-hold with >=5 trades")
+        print(f"  {len(validated)}/{len(strategy_results)} symbols validated (profitable and beat buy-and-hold, >=5 trades)")
         if traded:
             avg_win_rate = sum(r.win_rate for r in traded) / len(traded)
             finite_pf = [r.profit_factor for r in traded if r.profit_factor != float("inf")]
