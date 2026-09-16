@@ -1,12 +1,16 @@
 """
 CLI: run every candidate strategy's backtest over the configured universe
-(US and India) and print a verdict per symbol plus aggregate stats. This
-is the gate -- nothing in orchestrator.py should be trusted to auto-execute
-until a strategy has been run through here and shown a real edge.
+(US, India, commodities, or all of them) and print a verdict per symbol
+plus aggregate stats. This is the gate -- nothing in orchestrator.py
+should be trusted to auto-execute until a strategy has been run through
+here and shown a real edge.
 
 Usage:
     python -m paper_trader.backtest.run_backtest
+    python -m paper_trader.backtest.run_backtest --universe commodities
+    python -m paper_trader.backtest.run_backtest --universe us,india
 """
+import argparse
 from datetime import datetime, timedelta
 
 from paper_trader.config import settings
@@ -16,14 +20,28 @@ from paper_trader.strategy.trend_following import TrendFollowingStrategy
 from paper_trader.backtest.engine import run_backtest
 
 STRATEGIES = [TrendFollowingStrategy(), MeanReversionStrategy()]
-UNIVERSES = [
-    ("US", settings.us_stocks, False),
-    ("INDIA", settings.india_stocks, True),
-    ("COMMODITIES", settings.commodities, False),
-]
+ALL_UNIVERSES = {
+    "us": ("US", settings.us_stocks, False),
+    "india": ("INDIA", settings.india_stocks, True),
+    "commodities": ("COMMODITIES", settings.commodities, False),
+}
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--universe",
+        default="us,india,commodities",
+        help="Comma-separated subset to run: us, india, commodities (default: all three)",
+    )
+    args = parser.parse_args(argv)
+
+    keys = [k.strip().lower() for k in args.universe.split(",")]
+    unknown = [k for k in keys if k not in ALL_UNIVERSES]
+    if unknown:
+        parser.error(f"Unknown universe(s): {unknown}. Choose from: {list(ALL_UNIVERSES)}")
+    universes = [ALL_UNIVERSES[k] for k in keys]
+
     fetcher = DataFetcher()
     start_date = (datetime.now() - timedelta(days=365 * 5)).strftime("%Y-%m-%d")
 
@@ -33,7 +51,7 @@ def main():
         print(f"BACKTEST: {strategy.name}")
         print("=" * 70)
 
-        for market, symbols, india in UNIVERSES:
+        for market, symbols, india in universes:
             print(f"\n--- {market} universe ({len(symbols)} symbols) ---")
             results = []
             for symbol in symbols:

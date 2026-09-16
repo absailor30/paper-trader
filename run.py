@@ -3,7 +3,8 @@ CLI entry point.
 
     python run.py cycle          # run one US + India cycle (propose-only unless AUTO_EXECUTE=true)
     python run.py cycle --market US
-    python run.py backtest       # run the strategy backtest (see paper_trader/backtest/run_backtest.py)
+    python run.py backtest       # run the strategy backtest, all universes (see paper_trader/backtest/run_backtest.py)
+    python run.py backtest --universe commodities
 """
 import argparse
 import json
@@ -21,13 +22,18 @@ def main():
     cycle_parser = sub.add_parser("cycle")
     cycle_parser.add_argument("--market", choices=["US", "INDIA"], default=None)
 
-    sub.add_parser("backtest")
+    backtest_parser = sub.add_parser("backtest")
+    backtest_parser.add_argument(
+        "--universe",
+        default="us,india,commodities",
+        help="Comma-separated subset to run: us, india, commodities (default: all three)",
+    )
 
     args = parser.parse_args()
 
     if args.command == "backtest":
         from paper_trader.backtest.run_backtest import main as run_backtest_main
-        run_backtest_main()
+        run_backtest_main(["--universe", args.universe])
         return
 
     logger.info(f"AUTO_EXECUTE={settings.auto_execute}")
