@@ -85,43 +85,56 @@ fix to trust on faith):
 - `run_backtest.py` now runs both strategies and prints separate
   per-strategy verdicts.
 
-## Strategy scoreboard (as of 2026-09-16)
+## Strategy scoreboard (as of 2026-09-17, full real-data run)
 
 Single source of truth for what's actually been tested against real
 market data and what the result was. Update this table, don't just
 narrate results in chat, every time a real backtest result comes back.
 
+Full run: `python run.py backtest` across US (24 symbols), India (14,
+TATAMOTORS.NS delisted/unavailable), Commodities (4) — 42 symbols total
+per strategy, 3 strategies, 1993 trades combined.
+
+| Strategy | Symbols validated | Avg win rate | Avg profit factor | Avg max drawdown |
+|---|---|---|---|---|
+| Trend Following (SMA 50/200 + ATR stop) | 3/42 | 26.4% | 1.49 | -2.72% |
+| Mean Reversion (RSI oversold-recovery) | 0/42 | 52.5% | 1.67 | -2.14% |
+| Donchian Breakout (20d entry / 10d exit) | 3/42 | 43.9% | 1.72 | -3.68% |
+
+"Validated" = profitable AND beat buy-and-hold AND >=5 trades — a near-
+impossible bar in this 2022-2026 window (extreme bull run, e.g. NVDA
++1300%), so the win-rate/profit-factor columns are the more honest read.
+
+**Read**: Mean Reversion has the best win rate and lowest drawdown but
+literally 0/42 beat buy-and-hold (small, choppy gains vs. a runaway
+market). Donchian has the best profit factor (1.72) and a respectable
+win rate (43.9%) but the widest drawdown. Trend Following is weakest on
+every axis — the whipsaw fix helped it stop losing money outright but it
+still has the lowest win rate of the three. None of the three has a
+demonstrated edge worth auto-executing yet; Donchian and Mean Reversion
+are the two worth refining further before Trend Following.
+
 | Strategy | Universe | Result | Validated? |
 |---|---|---|---|
-| Trend Following (SMA 50/200 + ATR stop) | US stocks (widened, 38 symbols) | Whipsaw bug found and fixed (2-close exit rule); re-run not yet reported back with clean aggregate numbers | Not confirmed |
-| Mean Reversion (RSI oversold-recovery) | US stocks (widened, 38 symbols) | Best-performing so far on individual names (e.g. NVDA 100% win rate once profit_factor bug fixed); some India names (TCS/INFY/WIPRO/HINDUNILVR) came back negative-return, correctly caught as NOT VALIDATED after the "beats a falling benchmark" bug was fixed | Mixed — no clean aggregate win-rate/profit-factor table captured yet |
-| Trend Following | Commodities (GLD/SLV/USO/UNG) | 0/4 validated | No |
-| Mean Reversion | Commodities (GLD/SLV/USO/UNG) | 0/4 validated, weaker than trend-following on commodities | No |
 | Momentum Rotation (top-5, 126d lookback, 21d rebalance) | US (widened) | +60.29% vs +117.00% benchmark, Sharpe 0.63, max DD -23.82% — run **before** the insufficient-capital bug fix, needs re-run | No |
 | Momentum Rotation | India | +2.13% vs +49.88% benchmark, Sharpe 0.10, max DD -22.45% — same caveat, needs re-run | No |
-| Donchian Breakout | — | Not built yet | — |
 
-**Bottom line so far**: nothing is validated yet. Mean reversion on
-individual US stocks is the most promising thread but I don't have a
-clean aggregate table for it — next real-data run should capture that
-explicitly instead of just spot-checking symbols. Rotation underperformed
-its own benchmark by a wide enough margin that the capital-allocation bug
-fix (see below) probably won't flip the verdict, but it needs re-running
-to confirm rather than assumed.
+Rotation still needs a re-run post-fix (see bug log) — not yet included
+in the comparison above.
 
 ## Next steps (in order)
 
 1. Re-run `python run.py rotation` (both universes) now that the
    insufficient-capital allocation bug is fixed, to get a clean number —
    the ones in the table above were measured with the bug present.
-2. Re-run `python run.py backtest` and capture the full aggregate table
-   (avg win rate, avg profit factor, avg drawdown) per strategy per
-   universe into this checkpoint — not just individual symbol anecdotes.
-3. Build and backtest Donchian breakout (in progress now).
-4. Once at least one strategy is validated on real data with a clean
+2. Decide whether to iterate on Donchian (best profit factor) or Mean
+   Reversion (best win rate/drawdown) — e.g. tighter entry filters,
+   different lookback/exit periods — since neither is validated as-is
+   but both show more promise than Trend Following.
+3. Once at least one strategy is validated on real data with a clean
    aggregate table: run `python run.py cycle` in propose-only mode for a
    while and sanity-check proposals before flipping `AUTO_EXECUTE=true`.
-5. Only after that: decide whether/what to merge into `main`, and
+4. Only after that: decide whether/what to merge into `main`, and
    whether to re-add Telegram/dashboard/deployment on top.
 
 ## Bug log (rebuild/v2)
