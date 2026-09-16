@@ -16,6 +16,12 @@ momentum rotation.
 
 Plain rule-based technical analysis, same as the other strategies here --
 not machine learning, not reinforcement learning.
+
+Constructor args default to config.settings but can be overridden per
+instance -- this is what lets run_backtest.py's --sweep sweep entry/exit
+periods and the trend filter without touching global settings, so several
+variants can be compared side by side in one real-data run instead of
+guessing at one config blind.
 """
 from typing import Optional
 
@@ -23,21 +29,36 @@ import pandas as pd
 
 from paper_trader.config import settings
 from paper_trader.strategy.base import Position, Signal, SignalType, Strategy
-from paper_trader.strategy.indicators import atr, donchian_high, donchian_low
+from paper_trader.strategy.indicators import atr, donchian_high, donchian_low, sma
 
 
 class DonchianBreakoutStrategy(Strategy):
-    name = "Donchian_Breakout"
+    def __init__(
+        self,
+        entry_period: int = None,
+        exit_period: int = None,
+        trend_filter_period: Optional[int] = None,
+        name: str = "Donchian_Breakout",
+    ):
+        # trend_filter_period=None disables the filter (original
+        # behavior); a positive value requires close > SMA(period) to
+        # enter, which is the classic Turtle-system fix for whipsaw
+        # breakouts in a sideways/choppy market -- a breakout against the
+        # longer-term trend is far more likely to fail.
+        self.entry_period = entry_period if entry_period is not None else settings.donchian_entry_period
+        self.exit_period = exit_period if exit_period is not None else settings.donchian_exit_period
+        self.trend_filter_period = trend_filter_period
+        self.name = name
 
     def generate_signal(self, data: pd.DataFrame) -> Optional[Signal]:
-        min_bars = max(settings.donchian_entry_period, settings.atr_period) + 2
+        min_bars = max(self.entry_period, settings.atr_period, self.trend_filter_period or 0) + 2
         if len(data) < min_bars:
             return None
 
         close = data["close"]
         high = data["high"]
         low = data["low"]
-        entry_channel = donchian_high(high, settings.donchian_entry_period)
+        entry_channel = donchian_high(high, self.entry_period)
         atr_series = atr(high, low, close, settings.atr_period)
 
         price = close.iloc[-1]
@@ -50,6 +71,11 @@ class DonchianBreakoutStrategy(Strategy):
         breakout = price > channel_now
         if not breakout:
             return None
+
+        if self.trend_filter_period is not None:
+            trend_sma = sma(close, self.trend_filter_period).iloc[-1]
+            if pd.isna(trend_sma) or price <= trend_sma:
+                return None
 
         stop_loss = price - settings.atr_stop_multiple * atr_now
         if stop_loss <= 0 or stop_loss >= price:
@@ -70,20 +96,20 @@ class DonchianBreakoutStrategy(Strategy):
             stop_loss=float(stop_loss),
             take_profit=float(take_profit),
             reasoning=(
-                f"Close {price:.2f} broke above the {settings.donchian_entry_period}-day "
+                f"Close {price:.2f} broke above the {self.entry_period}-day "
                 f"high ({channel_now:.2f}); ATR({settings.atr_period})={atr_now:.2f}"
             ),
         )
 
     def should_exit(self, position: Position, data: pd.DataFrame) -> bool:
-        min_bars = settings.donchian_exit_period + 2
+        min_bars = self.exit_period + 2
         if len(data) < min_bars:
             return False
 
         close = data["close"]
         low = data["low"]
         price = position.current_price
-        exit_channel = donchian_low(low, settings.donchian_exit_period)
+        exit_channel = donchian_low(low, self.exit_period)
         channel_now = exit_channel.iloc[-1]
 
         if position.stop_loss and price <= position.stop_loss:

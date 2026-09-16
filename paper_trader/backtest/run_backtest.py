@@ -27,6 +27,20 @@ ALL_UNIVERSES = {
     "commodities": ("COMMODITIES", settings.commodities, False),
 }
 
+# Donchian variants to compare in one real-data run instead of guessing at
+# one config blind -- see CHECKPOINT.md "Donchian iteration" for why these
+# specific combos: the original default, the classic slower Turtle System 2
+# periods (55/20), a faster/choppier variant (10/5), and the default entry
+# window with a 100-day trend filter added (skip breakouts against the
+# longer-term trend, the standard whipsaw fix for pure breakout systems).
+DONCHIAN_SWEEP = [
+    DonchianBreakoutStrategy(20, 10, None, name="Donchian_20_10_baseline"),
+    DonchianBreakoutStrategy(55, 20, None, name="Donchian_55_20_turtle"),
+    DonchianBreakoutStrategy(10, 5, None, name="Donchian_10_5_fast"),
+    DonchianBreakoutStrategy(20, 10, 100, name="Donchian_20_10_trend100"),
+    DonchianBreakoutStrategy(55, 20, 100, name="Donchian_55_20_trend100"),
+]
+
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
@@ -34,6 +48,12 @@ def main(argv=None):
         "--universe",
         default="us,india,commodities",
         help="Comma-separated subset to run: us, india, commodities (default: all three)",
+    )
+    parser.add_argument(
+        "--sweep",
+        choices=["donchian"],
+        help="Instead of the fixed strategy list, run a parameter sweep for the named strategy "
+        "(currently only 'donchian') and compare variants side by side.",
     )
     args = parser.parse_args(argv)
 
@@ -46,8 +66,10 @@ def main(argv=None):
     fetcher = DataFetcher()
     start_date = (datetime.now() - timedelta(days=365 * 5)).strftime("%Y-%m-%d")
 
+    strategies = DONCHIAN_SWEEP if args.sweep == "donchian" else STRATEGIES
+
     all_results = []
-    for strategy in STRATEGIES:
+    for strategy in strategies:
         print("=" * 70)
         print(f"BACKTEST: {strategy.name}")
         print("=" * 70)
@@ -78,7 +100,7 @@ def main(argv=None):
         "aggregate stats below (win rate, profit factor, drawdown) are the\n"
         "more meaningful read on whether a strategy has a real edge.\n"
     )
-    for strategy in STRATEGIES:
+    for strategy in strategies:
         strategy_results = [r for r in all_results if r.strategy_name == strategy.name]
         traded = [r for r in strategy_results if r.num_trades >= 5]
         validated = [r for r in strategy_results if r.is_validated()]

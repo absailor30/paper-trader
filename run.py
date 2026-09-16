@@ -5,6 +5,7 @@ CLI entry point.
     python run.py cycle --market US
     python run.py backtest       # run the strategy backtest, all universes (see paper_trader/backtest/run_backtest.py)
     python run.py backtest --universe commodities
+    python run.py backtest --sweep donchian   # compare Donchian entry/exit/trend-filter variants
     python run.py rotation       # run the momentum rotation backtest (see paper_trader/backtest/run_rotation_backtest.py)
     python run.py rotation --universe india
 """
@@ -30,6 +31,12 @@ def main():
         default="us,india,commodities",
         help="Comma-separated subset to run: us, india, commodities (default: all three)",
     )
+    backtest_parser.add_argument(
+        "--sweep",
+        choices=["donchian"],
+        default=None,
+        help="Run a parameter sweep for the named strategy instead of the fixed strategy list",
+    )
 
     rotation_parser = sub.add_parser("rotation")
     rotation_parser.add_argument(
@@ -42,7 +49,10 @@ def main():
 
     if args.command == "backtest":
         from paper_trader.backtest.run_backtest import main as run_backtest_main
-        run_backtest_main(["--universe", args.universe])
+        backtest_args = ["--universe", args.universe]
+        if args.sweep:
+            backtest_args += ["--sweep", args.sweep]
+        run_backtest_main(backtest_args)
         return
 
     if args.command == "rotation":

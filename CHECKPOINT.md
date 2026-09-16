@@ -149,6 +149,53 @@ a residual bug.
 5. Only after that: decide whether/what to merge into `main`, and whether to
    re-add Telegram/dashboard/deployment on top.
 
+## Donchian iteration (2026-09-16, prep for tomorrow's real-data session)
+
+Sandbox has no network access, so nothing below is a real backtest result —
+it's infrastructure + correctness prep so tomorrow's session can compare
+variants against real data in one run instead of guessing at one config.
+
+**Code changes:**
+- `DonchianBreakoutStrategy` constructor now takes `entry_period`,
+  `exit_period`, `trend_filter_period`, `name` — all optional, default to
+  the existing `settings.donchian_*` values, so nothing changes for
+  existing callers.
+- Added an optional trend filter: when `trend_filter_period` is set, entry
+  additionally requires `close > SMA(trend_filter_period)`. Classic fix for
+  pure breakout systems whipsawing on breakouts against the longer-term
+  trend (e.g. a sharp bounce inside an ongoing downtrend).
+- `run.py backtest --sweep donchian` / `python -m
+  paper_trader.backtest.run_backtest --sweep donchian` runs 5 variants
+  side by side instead of the fixed 3-strategy list:
+  - `Donchian_20_10_baseline` — current default, no trend filter
+  - `Donchian_55_20_turtle` — classic slower Turtle System 2 periods
+  - `Donchian_10_5_fast` — faster/choppier variant
+  - `Donchian_20_10_trend100` — default periods + 100-day trend filter
+  - `Donchian_55_20_trend100` — slow periods + trend filter
+- 4 new tests (`test_custom_periods_override_settings_defaults`,
+  `test_trend_filter_blocks_breakout_below_long_term_sma`,
+  `test_sweep_variants_have_distinct_names`, plus the existing suite) — 45/45
+  pass. Also smoke-tested all 5 sweep variants end-to-end against synthetic
+  data (no crashes, no shared-state bugs between variants).
+
+**Next step (tomorrow, on the laptop with real data):** run `python run.py
+backtest --sweep donchian` across US/India/commodities and pick whichever
+variant(s) validate — don't assume trend-filter or slower periods are
+"better," that's exactly what the real run needs to decide.
+
+## Other work this session
+
+- Sanity-checked the rotation trade log end-to-end against a synthetic
+  24-symbol/5-year run: 0 rejected orders, cash-flow reconciliation exact
+  to the cent, total_value reconciliation exact, no lookahead bias in the
+  momentum ranking (same-bar decide/execute is a pre-existing convention
+  shared with `engine.py`, not new to rotation). No bugs found — the
+  validated US rotation result stands.
+- Did not add new speculative strategies beyond what was asked (Donchian
+  iteration) — per the project's own rule, nothing gets built and left
+  untested; better to hand off clean, sweep-ready code than half-tested
+  new strategies with no real data to check them against here.
+
 ## Bug log (rebuild/v2)
 
 | Bug | Found via | Fix |

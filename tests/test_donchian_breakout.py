@@ -70,3 +70,50 @@ def test_no_exit_with_insufficient_history(short_data):
         stop_loss=90.0, take_profit=150.0,
     )
     assert strategy.should_exit(position, short_data) is False
+
+
+def test_custom_periods_override_settings_defaults(donchian_breakout_data):
+    # A tighter 10-day entry channel should break out earlier (or at least
+    # as early) than the 20-day default on the same rally.
+    default_strategy = DonchianBreakoutStrategy()
+    fast_strategy = DonchianBreakoutStrategy(entry_period=10, exit_period=5)
+
+    def first_signal_index(strategy):
+        for i in range(60, len(donchian_breakout_data)):
+            if strategy.generate_signal(donchian_breakout_data.iloc[: i + 1]):
+                return i
+        return None
+
+    default_idx = first_signal_index(default_strategy)
+    fast_idx = first_signal_index(fast_strategy)
+    assert default_idx is not None and fast_idx is not None
+    assert fast_idx <= default_idx
+
+
+def test_trend_filter_blocks_breakout_below_long_term_sma():
+    # Construct a series where price breaks a short 20-day high but is
+    # still well below its 100-day SMA (a bear-market bounce) -- the
+    # trend filter should suppress the signal a bare breakout would take.
+    import numpy as np
+    from tests.conftest import _make_ohlcv
+
+    decline = 200 - np.linspace(0, 100, 150)  # long grinding decline
+    bounce = decline[-1] + np.linspace(0, 15, 20)  # sharp short bounce off the bottom
+    close = np.concatenate([decline, bounce])
+    data = _make_ohlcv(close, "BEAR")
+
+    filtered_strategy = DonchianBreakoutStrategy(entry_period=20, exit_period=10, trend_filter_period=100)
+    unfiltered_strategy = DonchianBreakoutStrategy(entry_period=20, exit_period=10)
+
+    filtered_signals = [filtered_strategy.generate_signal(data.iloc[: i + 1]) for i in range(160, len(data))]
+    unfiltered_signals = [unfiltered_strategy.generate_signal(data.iloc[: i + 1]) for i in range(160, len(data))]
+
+    assert any(s is not None for s in unfiltered_signals), "fixture doesn't produce a bare breakout; test is unverifiable"
+    assert all(s is None for s in filtered_signals)
+
+
+def test_sweep_variants_have_distinct_names():
+    from paper_trader.backtest.run_backtest import DONCHIAN_SWEEP
+    names = [s.name for s in DONCHIAN_SWEEP]
+    assert len(names) == len(set(names))
+    assert len(DONCHIAN_SWEEP) >= 2
