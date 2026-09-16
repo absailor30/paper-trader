@@ -33,8 +33,16 @@ class Settings(BaseSettings):
     fast_sma: int = 50
     slow_sma: int = 200
     atr_period: int = 14
-    atr_stop_multiple: float = 2.5        # stop = entry - N * ATR
+    atr_stop_multiple: float = 3.5        # stop = entry - N * ATR (widened from
+                                           # 2.5 after the first backtest showed
+                                           # frequent premature stop-outs — see
+                                           # trend_following.py docstring)
     min_risk_reward: float = 1.5
+
+    # Strategy parameters (mean reversion)
+    rsi_period: int = 14
+    rsi_oversold: float = 30.0
+    rsi_overbought: float = 70.0
 
     # Costs (applied identically in backtest and live paper trading, so
     # backtest results and live results are directly comparable)

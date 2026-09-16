@@ -44,6 +44,22 @@ def flat_data() -> pd.DataFrame:
 
 
 @pytest.fixture
+def pullback_in_uptrend_data() -> pd.DataFrame:
+    """400 bars of gentle uptrend (long enough that the 200 SMA is fully
+    established, and price stays above it throughout — the mean-reversion
+    strategy's trend filter), with a sharp ~15% dip-and-recovery carved in
+    after the SMA200 has settled, driving RSI(14) down through 30 and back
+    up — an oversold-in-uptrend entry setup."""
+    base = 100 + np.linspace(0, 80, 400)
+    dip = np.zeros(400)
+    dip_start = 300
+    dip[dip_start : dip_start + 8] = -np.linspace(0, 15, 8)
+    dip[dip_start + 8 : dip_start + 16] = -np.linspace(15, 0, 8)
+    close = base + dip
+    return _make_ohlcv(close, "PULLBACK")
+
+
+@pytest.fixture
 def short_data() -> pd.DataFrame:
     """Too few bars for any indicator to be meaningful."""
     close = np.linspace(100, 110, 30)

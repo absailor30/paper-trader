@@ -12,6 +12,24 @@ five strategies and a "regime detection" layer none of which had been
 validated to have any edge. See `CHECKPOINT.md` for that history and why
 this rebuild happened.
 
+## Status: iteration 2
+
+The first backtest run (see `CHECKPOINT.md`) showed the trend-following
+strategy's original exit rule (single close below the 50 SMA) whipsawing
+out of real trends — 0/6 symbols beat buy-and-hold, win rates 8-27%. Two
+changes went in as a result, not yet re-verified against real data:
+
+- Exit now requires two consecutive closes below the 50 SMA, and the ATR
+  stop widened from 2.5x to 3.5x — both aimed at reducing premature
+  stop-outs from single-day noise.
+- A second strategy, `MeanReversionStrategy` (RSI oversold-recovery
+  within a long-term uptrend), was added so the next backtest run
+  compares two approaches, not just re-tests a tweaked version of one.
+
+`python run.py backtest` now runs both and prints separate per-strategy
+verdicts. Whether either one actually has an edge is still unverified —
+that's the next real-internet run, same as before.
+
 ## Design principles
 
 1. **Backtest before automation.** `paper_trader/backtest/` runs a

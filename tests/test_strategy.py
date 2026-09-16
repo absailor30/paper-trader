@@ -1,5 +1,8 @@
+import numpy as np
+
 from paper_trader.strategy.base import Position, SignalType
 from paper_trader.strategy.trend_following import TrendFollowingStrategy
+from tests.conftest import _make_ohlcv
 
 
 def test_generates_buy_signal_somewhere_in_uptrend(uptrend_data):
@@ -36,6 +39,33 @@ def test_should_exit_on_stop_loss(uptrend_data):
         stop_loss=145.0, take_profit=200.0,
     )
     assert strategy.should_exit(position, uptrend_data) is True
+
+
+def test_single_day_dip_below_sma_does_not_exit():
+    """Regression test for the whipsaw bug found in the first real
+    backtest: a single-day dip below the 50 SMA must not trigger an exit
+    on its own (that's what was causing frequent premature stop-outs)."""
+    strategy = TrendFollowingStrategy()
+    close = np.concatenate([np.full(60, 100.0), [90.0]])
+    data = _make_ohlcv(close, "X")
+    position = Position(
+        symbol="X", quantity=1, entry_price=100.0, current_price=90.0,
+        entry_time="2024-01-01", strategy_name=strategy.name,
+        stop_loss=50.0, take_profit=500.0,
+    )
+    assert strategy.should_exit(position, data) is False
+
+
+def test_two_consecutive_days_below_sma_does_exit():
+    strategy = TrendFollowingStrategy()
+    close = np.concatenate([np.full(60, 100.0), [90.0, 88.0]])
+    data = _make_ohlcv(close, "X")
+    position = Position(
+        symbol="X", quantity=1, entry_price=100.0, current_price=88.0,
+        entry_time="2024-01-01", strategy_name=strategy.name,
+        stop_loss=50.0, take_profit=500.0,
+    )
+    assert strategy.should_exit(position, data) is True
 
 
 def test_should_exit_on_take_profit(uptrend_data):

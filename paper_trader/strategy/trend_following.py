@@ -4,7 +4,15 @@ SMA(50/200) trend-following strategy with an ATR-based stop.
 Entry: price closes above the 50 SMA while the 50 SMA is above the 200 SMA
 (a Stage-2-style uptrend), and yesterday's close was at or below the 50 SMA
 (so this is the crossover bar, not day 40 of an existing uptrend).
-Exit: price closes back below the 50 SMA, or the ATR stop is hit.
+Exit: two consecutive closes back below the 50 SMA, or the ATR stop is hit.
+
+A first backtest (2022-07 to 2026-09, SPY/QQQ/AAPL/MSFT/NVDA/AMD) showed
+0/6 symbols beating buy-and-hold, with win rates of 8-27% — the exit was
+firing on single-day dips below the 50 SMA, whipsawing out of real trends
+before they played out (NVDA: -1.18% here vs +1268% buy-and-hold). The
+2-consecutive-close confirmation and wider ATR stop below are the fix for
+that; whether it actually helps still needs to be re-verified by running
+the backtest again, not assumed.
 
 This is plain rule-based technical analysis. It is not machine learning
 and not reinforcement learning — it is not described as either anywhere
@@ -73,17 +81,26 @@ class TrendFollowingStrategy(Strategy):
         )
 
     def should_exit(self, position: Position, data: pd.DataFrame) -> bool:
-        if len(data) < settings.fast_sma + 1:
+        if len(data) < settings.fast_sma + 2:
             return False
 
         close = data["close"]
         price = position.current_price
-        fast_now = sma(close, settings.fast_sma).iloc[-1]
+        fast = sma(close, settings.fast_sma)
 
         if position.stop_loss and price <= position.stop_loss:
             return True
         if position.take_profit and price >= position.take_profit:
             return True
-        if not pd.isna(fast_now) and price < fast_now:
-            return True
-        return False
+
+        # Require two consecutive daily closes below the 50 SMA, not one,
+        # before treating this as a trend break. This checks the bar
+        # series' own closes (a multi-day structural pattern), not
+        # position.current_price — a single day's live price is a
+        # different kind of comparison from "has the trend broken over
+        # the last two closes."
+        fast_now, fast_prev = fast.iloc[-1], fast.iloc[-2]
+        if pd.isna(fast_now) or pd.isna(fast_prev):
+            return False
+        two_closes_below = close.iloc[-1] < fast_now and close.iloc[-2] < fast_prev
+        return bool(two_closes_below)

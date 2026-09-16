@@ -62,18 +62,38 @@ wholesale.
   environment with real internet access, before `AUTO_EXECUTE` is ever
   set to true.
 
+## Update: first real backtest ran (2026-09-16)
+
+Ran `python run.py backtest` on a laptop with real internet — this
+sandbox still can't (see network policy note above). Result: **0/6
+symbols beat buy-and-hold**, win rates 8.7%-27.3%, and on NVDA the
+strategy returned -1.18% while buy-and-hold returned +1268.40%.
+
+Root cause from the trade log: the exit rule ("close back below the 50
+SMA") fired on single-day dips, whipsawing out of real trends before
+they played out — dozens of round trips paying commission+slippage while
+barely breaking even, never capturing the actual moves.
+
+Response (not yet re-verified — this is the next thing to test, not a
+fix to trust on faith):
+- `TrendFollowingStrategy.should_exit()` now requires two consecutive
+  closes below the 50 SMA, not one.
+- `atr_stop_multiple` widened 2.5x -> 3.5x.
+- Added `MeanReversionStrategy` (RSI oversold-recovery in a long-term
+  uptrend) as a second candidate, so the next run compares two
+  approaches rather than re-testing one tweaked strategy in isolation.
+- `run_backtest.py` now runs both strategies and prints separate
+  per-strategy verdicts.
+
 ## Next steps (in order)
 
-1. Run `python run.py backtest` against real data (your laptop, or
-   Render). Read the per-symbol verdicts — don't just check it runs,
-   check whether it actually beats buy-and-hold with enough trades to
-   mean something.
-2. If the strategy doesn't show an edge: that's a real result, not a
-   bug — either iterate on the strategy or accept that trend-following
-   on this universe doesn't have one, before building anything further
-   on top of it.
-3. If it does: run `python run.py cycle` in propose-only mode for a
-   while and sanity-check the proposals against your own judgment before
-   flipping `AUTO_EXECUTE=true`.
+1. Run `python run.py backtest` again (laptop, real internet). Read
+   *both* strategies' per-symbol verdicts. Don't assume the trend-following
+   fix worked just because it's more conservative now — check the numbers.
+2. If neither shows an edge: that's a real result. Consider whether daily
+   bars are even the right timeframe for this universe, not just more
+   parameter tweaks.
+3. If one does: run `python run.py cycle` in propose-only mode for a
+   while and sanity-check the proposals before flipping `AUTO_EXECUTE=true`.
 4. Only after that: decide whether/what to merge into `main`, and
    whether to re-add Telegram/dashboard/deployment on top.
