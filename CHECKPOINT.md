@@ -178,10 +178,24 @@ variants against real data in one run instead of guessing at one config.
   pass. Also smoke-tested all 5 sweep variants end-to-end against synthetic
   data (no crashes, no shared-state bugs between variants).
 
-**Next step (tomorrow, on the laptop with real data):** run `python run.py
-backtest --sweep donchian` across US/India/commodities and pick whichever
-variant(s) validate — don't assume trend-filter or slower periods are
-"better," that's exactly what the real run needs to decide.
+**Real sweep result (2026-09-17, full 42-symbol run):**
+
+| Variant | Validated | Avg win rate | Avg PF | Avg max DD |
+|---|---|---|---|---|
+| Donchian_20_10_baseline | 3/42 | 43.9% | 1.72 | -3.68% |
+| **Donchian_20_10_trend100** | **5/42** | 43.6% | 1.64 | **-3.17%** |
+| Donchian_55_20_turtle | 1/42 | 46.9% | 1.77 | -3.09% |
+| Donchian_10_5_fast | 1/42 | 41.5% | 1.41 | -3.72% |
+| Donchian_55_20_trend100 | 1/42 | 46.9% | 1.77 | -3.09% |
+
+The 100-day trend filter on the default 20/10 periods is the winner: 5/42
+validated vs baseline's 3/42 (+67%), and drawdown cut from -3.68% to -3.17%,
+at a negligible cost to win rate/profit factor. Slower (55/20) and faster
+(10/5) period variants both did worse than baseline on validated count —
+period tuning alone doesn't help here, the trend filter does. **New default
+recommendation: `DonchianBreakoutStrategy(trend_filter_period=100)`** with
+the existing 20/10 periods, pending a decision on whether to make this the
+actual default in `run_backtest.py`'s `STRATEGIES` list.
 
 ## Other work this session
 
