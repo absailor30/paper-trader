@@ -16,7 +16,11 @@ from paper_trader.strategy.trend_following import TrendFollowingStrategy
 from paper_trader.backtest.engine import run_backtest
 
 STRATEGIES = [TrendFollowingStrategy(), MeanReversionStrategy()]
-UNIVERSES = [("US", settings.us_stocks, False), ("INDIA", settings.india_stocks, True)]
+UNIVERSES = [
+    ("US", settings.us_stocks, False),
+    ("INDIA", settings.india_stocks, True),
+    ("COMMODITIES", settings.commodities, False),
+]
 
 
 def main():

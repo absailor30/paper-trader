@@ -47,6 +47,16 @@ class Settings(BaseSettings):
         "SUNPHARMA",                                       # pharma
     ]
 
+    # Commodity ETFs (not raw futures contracts like GC=F/CL=F, which have
+    # periodic contract rollover gaps that distort a daily-bar SMA/RSI
+    # backtest). These track spot price continuously, same as an equity.
+    commodities: List[str] = [
+        "GLD",   # SPDR Gold Trust
+        "SLV",   # iShares Silver Trust
+        "USO",   # United States Oil Fund (WTI crude)
+        "UNG",   # United States Natural Gas Fund
+    ]
+
     # Risk parameters
     max_position_size: float = 0.12       # max 12% of portfolio per position
     max_daily_loss: float = 0.04          # daily circuit breaker
