@@ -19,9 +19,33 @@ class Settings(BaseSettings):
     us_capital: float = 100.0
     india_capital: float = 10000.0
 
-    # Universe (kept intentionally small while validating the strategy)
-    us_stocks: List[str] = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "AMD"]
-    india_stocks: List[str] = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK"]
+    # Universe. Widened from an initial 6-symbol mega-cap-tech-heavy set
+    # (SPY/QQQ/AAPL/MSFT/NVDA/AMD) after the first backtest results: that
+    # set was dominated by an extreme 2022-2026 bull run (NVDA +1268%),
+    # making "beat buy-and-hold" a near-impossible bar and telling us
+    # little about the strategy's actual edge. This set spans sectors
+    # (tech, healthcare, financials, energy, consumer, industrials,
+    # utilities) and deliberately includes names that have NOT been
+    # straight-line winners (BA, PFE, DIS) rather than only cherry-picking
+    # the biggest gainers, so the backtest isn't grading itself on easy mode.
+    us_stocks: List[str] = [
+        "AAPL", "MSFT", "GOOGL", "NVDA", "AMD",          # tech
+        "JNJ", "UNH", "PFE",                              # healthcare
+        "JPM", "BAC", "GS",                               # financials
+        "XOM", "CVX",                                     # energy
+        "WMT", "KO", "PG", "DIS",                         # consumer
+        "CAT", "BA",                                      # industrials
+        "NEE",                                            # utilities
+        "SPY", "QQQ", "IWM", "DIA",                       # broad-market benchmarks
+    ]
+    india_stocks: List[str] = [
+        "RELIANCE", "TCS", "INFY", "WIPRO",               # energy/IT
+        "HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK",      # financials
+        "HINDUNILVR", "ITC",                              # consumer staples
+        "BHARTIARTL", "LT",                                # telecom/industrials
+        "MARUTI", "TATAMOTORS",                            # auto
+        "SUNPHARMA",                                       # pharma
+    ]
 
     # Risk parameters
     max_position_size: float = 0.12       # max 12% of portfolio per position
