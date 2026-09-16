@@ -20,7 +20,11 @@ from paper_trader.strategy.mean_reversion import MeanReversionStrategy
 from paper_trader.strategy.trend_following import TrendFollowingStrategy
 from paper_trader.backtest.engine import run_backtest
 
-STRATEGIES = [TrendFollowingStrategy(), MeanReversionStrategy(), DonchianBreakoutStrategy()]
+STRATEGIES = [
+    TrendFollowingStrategy(),
+    MeanReversionStrategy(),
+    DonchianBreakoutStrategy(trend_filter_period=100),
+]
 ALL_UNIVERSES = {
     "us": ("US", settings.us_stocks, False),
     "india": ("INDIA", settings.india_stocks, True),

@@ -192,10 +192,14 @@ The 100-day trend filter on the default 20/10 periods is the winner: 5/42
 validated vs baseline's 3/42 (+67%), and drawdown cut from -3.68% to -3.17%,
 at a negligible cost to win rate/profit factor. Slower (55/20) and faster
 (10/5) period variants both did worse than baseline on validated count —
-period tuning alone doesn't help here, the trend filter does. **New default
-recommendation: `DonchianBreakoutStrategy(trend_filter_period=100)`** with
-the existing 20/10 periods, pending a decision on whether to make this the
-actual default in `run_backtest.py`'s `STRATEGIES` list.
+period tuning alone doesn't help here, the trend filter does.
+
+**Decision made**: `run_backtest.py`'s `STRATEGIES` list now uses
+`DonchianBreakoutStrategy(trend_filter_period=100)` as the default (was the
+untuned 20/10 baseline). 45/45 tests still pass. This changes what the plain
+`python run.py backtest` (no `--sweep`) reports for Donchian going forward —
+the scoreboard row above (3/42, -3.68% DD) is now stale and needs a re-run
+with the new default to confirm it lands at 5/42 the way the sweep did.
 
 ## Other work this session
 
