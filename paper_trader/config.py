@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     rsi_oversold: float = 30.0
     rsi_overbought: float = 70.0
 
+    # Strategy parameters (momentum rotation)
+    rotation_lookback_days: int = 126     # ~6 trading months of trailing return
+    rotation_top_n: int = 5               # hold this many names at a time
+    rotation_rebalance_days: int = 21     # ~monthly
+    rotation_min_momentum: float = 0.0    # exclude negative-momentum names
+                                           # even if fewer than top_n qualify
+
     # Costs (applied identically in backtest and live paper trading, so
     # backtest results and live results are directly comparable)
     commission_rate: float = 0.001

@@ -5,6 +5,8 @@ CLI entry point.
     python run.py cycle --market US
     python run.py backtest       # run the strategy backtest, all universes (see paper_trader/backtest/run_backtest.py)
     python run.py backtest --universe commodities
+    python run.py rotation       # run the momentum rotation backtest (see paper_trader/backtest/run_rotation_backtest.py)
+    python run.py rotation --universe india
 """
 import argparse
 import json
@@ -29,11 +31,23 @@ def main():
         help="Comma-separated subset to run: us, india, commodities (default: all three)",
     )
 
+    rotation_parser = sub.add_parser("rotation")
+    rotation_parser.add_argument(
+        "--universe",
+        default="us,india",
+        help="Comma-separated subset to run: us, india (default: both)",
+    )
+
     args = parser.parse_args()
 
     if args.command == "backtest":
         from paper_trader.backtest.run_backtest import main as run_backtest_main
         run_backtest_main(["--universe", args.universe])
+        return
+
+    if args.command == "rotation":
+        from paper_trader.backtest.run_rotation_backtest import main as run_rotation_main
+        run_rotation_main(["--universe", args.universe])
         return
 
     logger.info(f"AUTO_EXECUTE={settings.auto_execute}")
