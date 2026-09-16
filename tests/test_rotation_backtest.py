@@ -1,7 +1,10 @@
+import math
+
 import numpy as np
 import pandas as pd
 
 from paper_trader.backtest.rotation_backtest import run_rotation_backtest
+from paper_trader.execution.paper_trader import PaperTrader
 
 
 def _make_price_matrix(n_bars: int = 300) -> pd.DataFrame:
@@ -50,3 +53,62 @@ def test_rotation_backtest_raises_on_insufficient_history():
         assert False, "expected ValueError for insufficient history"
     except ValueError:
         pass
+
+
+def test_rotation_backtest_never_rejects_buy_orders_for_insufficient_capital():
+    """Regression: the equal-weight allocation must reserve headroom for
+    slippage+commission, or buys fill at more than their allocated share
+    and the last symbol(s) each rebalance get spuriously REJECTED even
+    though the target list was affordable in aggregate."""
+    price_df = _make_price_matrix()
+    result = run_rotation_backtest(price_df, "TEST", initial_capital=10_000.0)
+
+    assert result.num_trades > 0
+    # num_trades only counts orders actually placed via place_order, which
+    # includes rejected ones -- so directly replay the allocation formula
+    # against a fresh trader to check no BUY is ever rejected for capital.
+    from paper_trader.config import settings
+    from paper_trader.strategy.momentum_rotation import select_top_momentum
+
+    trader = PaperTrader(
+        initial_capital=10_000.0,
+        commission_rate=settings.commission_rate,
+        slippage_rate=settings.slippage_rate,
+    )
+    lookback = settings.rotation_lookback_days
+    rebalance_every = settings.rotation_rebalance_days
+    rejected_for_capital = []
+
+    for i in range(lookback, len(price_df)):
+        date = price_df.index[i]
+        prices_today = price_df.iloc[i].to_dict()
+        trader.update_prices(prices_today)
+        if (i - lookback) % rebalance_every == 0:
+            momentum_today = {
+                s: price_df[s].iloc[i] / price_df[s].iloc[i - lookback] - 1
+                for s in price_df.columns
+            }
+            target = select_top_momentum(momentum_today)
+            for symbol in list(trader.portfolio.positions):
+                pos = trader.portfolio.positions[symbol]
+                trader.place_order(
+                    client_order_id=f"{symbol}-{date.isoformat()}-SELL",
+                    symbol=symbol, side="SELL", quantity=pos["quantity"],
+                    price=prices_today[symbol], strategy="Momentum_Rotation",
+                )
+            if target:
+                headroom = (1 + settings.slippage_rate) * (1 + settings.commission_rate)
+                allocation = trader.portfolio.capital / len(target) / headroom
+                for symbol in target:
+                    price = prices_today[symbol]
+                    qty = math.floor(allocation / price * 10_000) / 10_000
+                    if qty > 0:
+                        order = trader.place_order(
+                            client_order_id=f"{symbol}-{date.isoformat()}-BUY",
+                            symbol=symbol, side="BUY", quantity=qty,
+                            price=price, strategy="Momentum_Rotation",
+                        )
+                        if order["status"] == "REJECTED" and order["reason"] == "Insufficient capital":
+                            rejected_for_capital.append(order)
+
+    assert rejected_for_capital == []

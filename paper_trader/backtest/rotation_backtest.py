@@ -11,6 +11,7 @@ pre-built price matrix and knows nothing about fetching data (that's
 run_rotation_backtest.py's job), so it's testable against synthetic
 data with no network involved.
 """
+import math
 from dataclasses import dataclass
 from typing import Dict, List
 
@@ -124,10 +125,19 @@ def run_rotation_backtest(
                 )
 
             if target:
-                allocation = trader.portfolio.capital / len(target)
+                # Buys fill at price*(1+slippage) plus commission on top, so
+                # a naive capital/len(target) split overshoots the actual
+                # cost by that fraction on every symbol -- exhausting
+                # capital before the last 1-2 buys, which then get rejected.
+                # Reserve that headroom up front.
+                cost_headroom = (1 + settings.slippage_rate) * (1 + settings.commission_rate)
+                allocation = trader.portfolio.capital / len(target) / cost_headroom
                 for symbol in target:
                     price = prices_today[symbol]
-                    qty = round(allocation / price, 4)
+                    # Floor, not round -- rounding up would spend slightly
+                    # more than this symbol's allocation, starving whatever
+                    # buys later in the same rebalance loop.
+                    qty = math.floor(allocation / price * 10_000) / 10_000
                     if qty > 0:
                         trader.place_order(
                             client_order_id=f"{symbol}-{date.isoformat()}-REBAL-BUY",

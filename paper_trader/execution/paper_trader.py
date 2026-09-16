@@ -78,7 +78,11 @@ class PaperTrader:
 
         if side == "BUY":
             total_cost = quantity * effective_price + commission
-            if total_cost > self.portfolio.capital:
+            # Tolerance for float rounding at the capital boundary -- a
+            # caller computing an allocation that should exactly exhaust
+            # capital can otherwise get spuriously REJECTED by a
+            # sub-cent difference.
+            if total_cost > self.portfolio.capital + 1e-6:
                 order["status"] = "REJECTED"
                 order["reason"] = "Insufficient capital"
                 logger.warning(f"Insufficient capital for {symbol}: need {total_cost:.2f}, have {self.portfolio.capital:.2f}")
