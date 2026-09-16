@@ -60,6 +60,20 @@ def pullback_in_uptrend_data() -> pd.DataFrame:
 
 
 @pytest.fixture
+def donchian_breakout_data() -> pd.DataFrame:
+    """60 flat bars (lets the 20-day channel settle), then a clean breakout
+    rally to a new high, a plateau, and finally a hard decline that breaks
+    below the tighter 10-day exit channel -- so both entry and exit fire
+    at distinct, findable points in the series."""
+    flat = 100 + np.sin(np.arange(60) / 5) * 0.3
+    rally = flat[-1] + np.linspace(0, 15, 20)
+    plateau = rally[-1] + np.sin(np.arange(20) / 5) * 0.3
+    decline = plateau[-1] - np.linspace(0, 20, 15)
+    close = np.concatenate([flat, rally, plateau, decline])
+    return _make_ohlcv(close, "DONCH")
+
+
+@pytest.fixture
 def short_data() -> pd.DataFrame:
     """Too few bars for any indicator to be meaningful."""
     close = np.linspace(100, 110, 30)

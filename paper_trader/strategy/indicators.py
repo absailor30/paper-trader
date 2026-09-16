@@ -17,6 +17,17 @@ def rsi(close: pd.Series, period: int = 14) -> pd.Series:
     return result.where(avg_loss != 0, 100.0)
 
 
+def donchian_high(high: pd.Series, period: int) -> pd.Series:
+    """Highest high over the prior `period` bars, excluding today -- shift(1)
+    before rolling so "today breaks out" can be tested against a channel
+    that doesn't include today's own bar."""
+    return high.shift(1).rolling(period).max()
+
+
+def donchian_low(low: pd.Series, period: int) -> pd.Series:
+    return low.shift(1).rolling(period).min()
+
+
 def atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
     prev_close = close.shift(1)
     tr = pd.concat(

@@ -15,11 +15,12 @@ from datetime import datetime, timedelta
 
 from paper_trader.config import settings
 from paper_trader.data.fetcher import DataFetcher
+from paper_trader.strategy.donchian_breakout import DonchianBreakoutStrategy
 from paper_trader.strategy.mean_reversion import MeanReversionStrategy
 from paper_trader.strategy.trend_following import TrendFollowingStrategy
 from paper_trader.backtest.engine import run_backtest
 
-STRATEGIES = [TrendFollowingStrategy(), MeanReversionStrategy()]
+STRATEGIES = [TrendFollowingStrategy(), MeanReversionStrategy(), DonchianBreakoutStrategy()]
 ALL_UNIVERSES = {
     "us": ("US", settings.us_stocks, False),
     "india": ("INDIA", settings.india_stocks, True),

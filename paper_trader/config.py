@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     rsi_oversold: float = 30.0
     rsi_overbought: float = 70.0
 
+    # Strategy parameters (Donchian breakout, classic Turtle-style
+    # channel: enter on a new N-day high, exit on a new M-day low)
+    donchian_entry_period: int = 20
+    donchian_exit_period: int = 10
+
     # Strategy parameters (momentum rotation)
     rotation_lookback_days: int = 126     # ~6 trading months of trailing return
     rotation_top_n: int = 5               # hold this many names at a time

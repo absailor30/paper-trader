@@ -85,15 +85,50 @@ fix to trust on faith):
 - `run_backtest.py` now runs both strategies and prints separate
   per-strategy verdicts.
 
+## Strategy scoreboard (as of 2026-09-16)
+
+Single source of truth for what's actually been tested against real
+market data and what the result was. Update this table, don't just
+narrate results in chat, every time a real backtest result comes back.
+
+| Strategy | Universe | Result | Validated? |
+|---|---|---|---|
+| Trend Following (SMA 50/200 + ATR stop) | US stocks (widened, 38 symbols) | Whipsaw bug found and fixed (2-close exit rule); re-run not yet reported back with clean aggregate numbers | Not confirmed |
+| Mean Reversion (RSI oversold-recovery) | US stocks (widened, 38 symbols) | Best-performing so far on individual names (e.g. NVDA 100% win rate once profit_factor bug fixed); some India names (TCS/INFY/WIPRO/HINDUNILVR) came back negative-return, correctly caught as NOT VALIDATED after the "beats a falling benchmark" bug was fixed | Mixed — no clean aggregate win-rate/profit-factor table captured yet |
+| Trend Following | Commodities (GLD/SLV/USO/UNG) | 0/4 validated | No |
+| Mean Reversion | Commodities (GLD/SLV/USO/UNG) | 0/4 validated, weaker than trend-following on commodities | No |
+| Momentum Rotation (top-5, 126d lookback, 21d rebalance) | US (widened) | +60.29% vs +117.00% benchmark, Sharpe 0.63, max DD -23.82% — run **before** the insufficient-capital bug fix, needs re-run | No |
+| Momentum Rotation | India | +2.13% vs +49.88% benchmark, Sharpe 0.10, max DD -22.45% — same caveat, needs re-run | No |
+| Donchian Breakout | — | Not built yet | — |
+
+**Bottom line so far**: nothing is validated yet. Mean reversion on
+individual US stocks is the most promising thread but I don't have a
+clean aggregate table for it — next real-data run should capture that
+explicitly instead of just spot-checking symbols. Rotation underperformed
+its own benchmark by a wide enough margin that the capital-allocation bug
+fix (see below) probably won't flip the verdict, but it needs re-running
+to confirm rather than assumed.
+
 ## Next steps (in order)
 
-1. Run `python run.py backtest` again (laptop, real internet). Read
-   *both* strategies' per-symbol verdicts. Don't assume the trend-following
-   fix worked just because it's more conservative now — check the numbers.
-2. If neither shows an edge: that's a real result. Consider whether daily
-   bars are even the right timeframe for this universe, not just more
-   parameter tweaks.
-3. If one does: run `python run.py cycle` in propose-only mode for a
-   while and sanity-check the proposals before flipping `AUTO_EXECUTE=true`.
-4. Only after that: decide whether/what to merge into `main`, and
+1. Re-run `python run.py rotation` (both universes) now that the
+   insufficient-capital allocation bug is fixed, to get a clean number —
+   the ones in the table above were measured with the bug present.
+2. Re-run `python run.py backtest` and capture the full aggregate table
+   (avg win rate, avg profit factor, avg drawdown) per strategy per
+   universe into this checkpoint — not just individual symbol anecdotes.
+3. Build and backtest Donchian breakout (in progress now).
+4. Once at least one strategy is validated on real data with a clean
+   aggregate table: run `python run.py cycle` in propose-only mode for a
+   while and sanity-check proposals before flipping `AUTO_EXECUTE=true`.
+5. Only after that: decide whether/what to merge into `main`, and
    whether to re-add Telegram/dashboard/deployment on top.
+
+## Bug log (rebuild/v2)
+
+| Bug | Found via | Fix |
+|---|---|---|
+| Single-day dip below SMA50 triggered exit, whipsawing out of real trends | Real US stock backtest | Require 2 consecutive closes below SMA; widened ATR stop 2.5x→3.5x |
+| `profit_factor` returned 0.0 for a 100% win rate (no losing trades) | Real NVDA mean-reversion backtest | Return `inf` when there are wins and no losses |
+| "POSITIVE EDGE" label on strategies that lost money but beat an even-more-negative benchmark | Real 38-symbol India backtest (TCS/INFY/WIPRO/HINDUNILVR) | `is_validated()` now also requires `total_return_pct > 0` |
+| Rotation rebalancing spuriously rejected buy orders for "insufficient capital" on nearly every rebalance | Real US+India rotation backtest trade log | Reserve slippage+commission headroom in allocation calc; floor (not round) quantity so early buys can't overspend and starve later ones; epsilon tolerance on the capital check |
