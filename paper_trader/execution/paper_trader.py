@@ -150,11 +150,18 @@ class PaperTrader:
         wins = [t for t in trades if t["pnl"] > 0]
         losses = [t for t in trades if t["pnl"] < 0]
         win_rate = (len(wins) / len(trades) * 100) if trades else 0.0
-        profit_factor = (
-            abs(sum(t["pnl"] for t in wins) / sum(t["pnl"] for t in losses))
-            if losses and sum(t["pnl"] for t in losses) != 0
-            else 0.0
-        )
+
+        gross_win = sum(t["pnl"] for t in wins)
+        gross_loss = abs(sum(t["pnl"] for t in losses))
+        if gross_loss > 0:
+            profit_factor = gross_win / gross_loss
+        elif gross_win > 0:
+            # Every trade was a winner: profit factor is undefined/infinite,
+            # not 0 -- 0.0 would misreport a perfect record as the worst
+            # possible one.
+            profit_factor = float("inf")
+        else:
+            profit_factor = 0.0
 
         return {
             "total_value": self.portfolio.total_value,

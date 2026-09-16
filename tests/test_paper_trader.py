@@ -52,6 +52,25 @@ def test_full_round_trip_pnl():
     assert trader.portfolio.trade_history[0]["pnl"] > 0
 
 
+def test_profit_factor_is_infinite_not_zero_with_no_losing_trades():
+    """Regression test: a perfect win record was reporting profit_factor
+    0.0 (misread as the worst possible score) instead of undefined/high."""
+    trader = make_trader(capital=2000.0)
+    trader.place_order("buy-1", "AAPL", "BUY", 10, 100.0, "TEST")
+    trader.update_prices({"AAPL": 110.0})
+    trader.place_order("sell-1", "AAPL", "SELL", 10, 110.0, "TEST")
+
+    metrics = trader.get_performance_metrics()
+    assert metrics["win_rate"] == 100.0
+    assert metrics["profit_factor"] == float("inf")
+
+
+def test_profit_factor_is_zero_with_no_trades():
+    trader = make_trader(capital=2000.0)
+    metrics = trader.get_performance_metrics()
+    assert metrics["profit_factor"] == 0.0
+
+
 def test_save_and_load_round_trip(tmp_path, monkeypatch):
     import paper_trader.persistence.state_store as state_store
     from sqlalchemy import create_engine
