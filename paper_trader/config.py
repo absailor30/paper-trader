@@ -46,7 +46,10 @@ class Settings(BaseSettings):
     # set to true after a backtest has demonstrated positive expectancy.
     auto_execute: bool = False
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    # extra="ignore": a leftover .env from the previous codebase (or any
+    # future unrelated var) must not crash startup — pydantic-settings
+    # rejects unknown env vars by default.
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()
