@@ -31,7 +31,14 @@ ALL_UNIVERSES = {
     "india": ("INDIA", settings.india_stocks, True),
     "commodities": ("COMMODITIES", settings.commodities, False),
     "crypto": ("CRYPTO", settings.crypto_pairs, False),
+    # Same pairs, USD-M futures OHLCV instead of spot. This backtest engine
+    # has no margin/liquidation/funding-rate model -- it treats futures
+    # bars exactly like spot (1x, no funding cost). That only tells you
+    # whether the strategy has an edge on futures *price action*; it says
+    # nothing about whether that edge survives real leverage or funding.
+    "crypto_futures": ("CRYPTO_FUTURES", settings.crypto_pairs, False),
 }
+CRYPTO_MARKETS = {"CRYPTO", "CRYPTO_FUTURES"}
 CRYPTO_START_CAPITAL = settings.crypto_capital
 
 # Donchian variants to compare in one real-data run instead of guessing at
@@ -54,7 +61,8 @@ def main(argv=None):
     parser.add_argument(
         "--universe",
         default="us,india,commodities",
-        help="Comma-separated subset to run: us, india, commodities, crypto (default: us,india,commodities)",
+        help="Comma-separated subset to run: us, india, commodities, crypto, crypto_futures "
+        "(default: us,india,commodities)",
     )
     parser.add_argument(
         "--sweep",
@@ -71,7 +79,10 @@ def main(argv=None):
     universes = [ALL_UNIVERSES[k] for k in keys]
 
     fetcher = DataFetcher()
-    crypto_fetcher = BinanceFetcher(market="spot")
+    crypto_fetchers = {
+        "CRYPTO": BinanceFetcher(market="spot"),
+        "CRYPTO_FUTURES": BinanceFetcher(market="futures"),
+    }
     start_date = (datetime.now() - timedelta(days=365 * 5)).strftime("%Y-%m-%d")
 
     strategies = DONCHIAN_SWEEP if args.sweep == "donchian" else STRATEGIES
@@ -85,11 +96,11 @@ def main(argv=None):
         for market, symbols, india in universes:
             print(f"\n--- {market} universe ({len(symbols)} symbols) ---")
             results = []
-            is_crypto = market == "CRYPTO"
+            is_crypto = market in CRYPTO_MARKETS
             capital = CRYPTO_START_CAPITAL if is_crypto else 10_000.0
             for symbol in symbols:
                 if is_crypto:
-                    data = crypto_fetcher.fetch(symbol, start_date=start_date)
+                    data = crypto_fetchers[market].fetch(symbol, start_date=start_date)
                 else:
                     data = fetcher.fetch(symbol, start_date=start_date, india=india)
                 if data.empty:
