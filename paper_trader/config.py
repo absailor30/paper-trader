@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # Capital
     us_capital: float = 100.0
     india_capital: float = 10000.0
+    crypto_capital: float = 1000.0
 
     # Universe. Widened from an initial 6-symbol mega-cap-tech-heavy set
     # (SPY/QQQ/AAPL/MSFT/NVDA/AMD) after the first backtest results: that
@@ -90,8 +91,20 @@ class Settings(BaseSettings):
     rotation_min_momentum: float = 0.0    # exclude negative-momentum names
                                            # even if fewer than top_n qualify
 
+    # Crypto universe (Binance spot pairs, quoted in USDT). Deliberately
+    # a small, liquid set to start -- majors plus a couple of large-caps --
+    # rather than every pair Binance lists, same reasoning as the equity
+    # universe widening: a backtest needs names that aren't all the same
+    # trade (BTC/ETH/SOL move together far more than AAPL/XOM do).
+    crypto_pairs: List[str] = [
+        "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
+        "ADAUSDT", "DOGEUSDT", "AVAXUSDT",
+    ]
+
     # Costs (applied identically in backtest and live paper trading, so
-    # backtest results and live results are directly comparable)
+    # backtest results and live results are directly comparable). Binance
+    # spot taker fee (no BNB discount) happens to match the equity default
+    # already used here, so no separate crypto rate is needed.
     commission_rate: float = 0.001
     slippage_rate: float = 0.0005
 

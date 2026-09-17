@@ -5,6 +5,7 @@ CLI entry point.
     python run.py cycle --market US
     python run.py backtest       # run the strategy backtest, all universes (see paper_trader/backtest/run_backtest.py)
     python run.py backtest --universe commodities
+    python run.py backtest --universe crypto   # Binance spot pairs (see settings.crypto_pairs)
     python run.py backtest --sweep donchian   # compare Donchian entry/exit/trend-filter variants
     python run.py rotation       # run the momentum rotation backtest (see paper_trader/backtest/run_rotation_backtest.py)
     python run.py rotation --universe india
