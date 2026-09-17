@@ -219,11 +219,23 @@ by simply not holding through the crash — breakout/trend-filter logic
 transfers to crypto's higher volatility reasonably well. Trend Following
 is weak here too (whipsaws badly in a 24/7, no-overnight-gap market).
 
-Not yet done: this only covers Binance spot. Futures (leverage, funding
-rate, liquidation) uses the same engine untested — those numbers would
-not be trustworthy as-is; needs its own margin-aware backtest logic
-before any futures number means anything. No crypto-native strategy
-(funding-rate carry, etc.) built yet either.
+**Futures price-action check (2026-09-17):** ran the same 3 strategies
+against Binance USD-M futures OHLCV (1x, no leverage/funding modeled —
+`--universe crypto_futures`). Result tracks spot closely:
+
+| Strategy | Validated | Avg win rate | Avg PF | Avg max DD |
+|---|---|---|---|---|
+| Trend Following | 1/8 | 19.9% | 0.74 | -7.29% |
+| Mean Reversion | 2/8 | 43.9% | 0.95 | -5.75% |
+| **Donchian (trend100)** | 4/8 | 45.0% | **1.47** | -8.13% |
+
+Nearly identical to spot (5/8 spot vs 4/8 futures, same strategy ranking) —
+confirms the Donchian edge isn't a spot-data artifact. This still says
+nothing about real futures trading: no margin/liquidation/funding-rate
+cost is modeled, so it only proves the price-action edge transfers, not
+that it survives leverage or funding cost. Needs a proper margin-aware
+backtest before any futures number is trustworthy for real leverage.
+No crypto-native strategy (funding-rate carry, etc.) built yet either.
 
 ## Other work this session
 
