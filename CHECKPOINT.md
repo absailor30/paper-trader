@@ -201,6 +201,30 @@ untuned 20/10 baseline). 45/45 tests still pass. This changes what the plain
 the scoreboard row above (3/42, -3.68% DD) is now stale and needs a re-run
 with the new default to confirm it lands at 5/42 the way the sweep did.
 
+## Crypto (Binance) real-data run (2026-09-17)
+
+First real result for the crypto universe (8 pairs: BTC/ETH/BNB/SOL/XRP/
+ADA/DOGE/AVAX, spot, 2022-04 to 2026-09). Same 3 strategies as equities.
+
+| Strategy | Validated | Avg win rate | Avg PF | Avg max DD |
+|---|---|---|---|---|
+| Trend Following (SMA 50/200) | 1/8 | 19.7% | 0.72 | -7.33% |
+| Mean Reversion (RSI) | 2/8 | 41.3% | 0.89 | -5.92% |
+| **Donchian (20/10 + trend100)** | **5/8** | 44.2% | **1.49** | -8.07% |
+
+Donchian is the only one with profit factor > 1 — same winner as equities/
+commodities. It validated on BTC, ETH, SOL, DOGE, AVAX; missed BNB, XRP,
+ADA. Notably beat buy-and-hold on AVAXUSDT (-90.9%) and ADAUSDT (-80.1%)
+by simply not holding through the crash — breakout/trend-filter logic
+transfers to crypto's higher volatility reasonably well. Trend Following
+is weak here too (whipsaws badly in a 24/7, no-overnight-gap market).
+
+Not yet done: this only covers Binance spot. Futures (leverage, funding
+rate, liquidation) uses the same engine untested — those numbers would
+not be trustworthy as-is; needs its own margin-aware backtest logic
+before any futures number means anything. No crypto-native strategy
+(funding-rate carry, etc.) built yet either.
+
 ## Other work this session
 
 - Sanity-checked the rotation trade log end-to-end against a synthetic
