@@ -170,16 +170,30 @@ actually wired up. `AUTO_EXECUTE` reads from a repo variable, defaulting to
 `false` — same propose-only gate as everywhere else, controlled without a
 code change.
 
-**Not yet done:**
-- `DATABASE_URL` secret not yet set — needs a Postgres connection string.
-  Supabase was the intended host, but the account's free tier only allows 2
-  active projects and both slots are currently used by unrelated projects
-  (`social-poster`, `checklist-at-restaurant`); a third project could not be
-  provisioned here. Needs the account owner to free a slot (pause/delete an
-  existing project, or upgrade) before a project — and its `DATABASE_URL` —
-  can be created and added as a secret.
-- Because of the above, no scheduled run has actually executed yet, so
-  "two consecutive runs show state continuity" is still unverified.
+**Resolved (2026-09-18):** Supabase's 2-project cap turned out to be a dead
+end (see "Vercel/Neon" note below) — switched to Neon.tech instead.
+`DATABASE_URL` is set as a GitHub Actions secret pointing at a real Neon
+Postgres instance. The repo's default branch was changed from `main` to
+`rebuild/v2` (GitHub only discovers/runs workflow files that exist on the
+default branch — this is why both workflows initially showed "0 workflows
+found" despite existing on `rebuild/v2`). Both `crypto-cycle.yml` and
+`crypto-intraday-stops.yml` have since run successfully. Confirmed via
+Neon's SQL Editor: a `crypto_portfolio` row exists (`capital: 1000.0,
+positions: {}, trade_history: [], ...`, `updated_at: 2026-09-17
+20:00:45`), proving the full path — Actions runner → `DATABASE_URL` →
+Neon Postgres — works end to end. Empty positions/unchanged capital is
+expected here: propose-only mode (`AUTO_EXECUTE` unset/false by default),
+no qualifying Donchian breakout on that run.
+
+**Still open:**
+- "Two consecutive scheduled runs show state continuity" (day 2 reflecting
+  day 1's state, not a reset) has not been explicitly demonstrated yet —
+  only one state snapshot has been observed so far. Both crons are live
+  (daily + every-30-min), so this should confirm itself passively; worth
+  a deliberate before/after check rather than assuming it from one snapshot.
+- The Neon connection string (including its password) was pasted in plain
+  text in chat during setup. Recommend rotating the Neon database password
+  from the Neon dashboard and updating the `DATABASE_URL` secret to match.
 - Binance is geo-blocked from this sandbox (HTTP 451 on
   `api.binance.com`), so the crypto strategy itself couldn't be re-validated
   here — only the equities/rotation numbers were reconfirmed this session.
@@ -295,11 +309,13 @@ pull.
 2. ~~Sanity-check US Momentum Rotation isn't a one-window fluke~~ — done,
    see "Re-run confirmation" above: reconfirmed on a fresh data pull,
    +149.56% vs +119.32% benchmark, consistent with the prior run.
-3. Free a Supabase project slot (pause or delete `social-poster` or
-   `checklist-at-restaurant`, or upgrade the plan), then provision the
-   Postgres project, add its connection string as the `DATABASE_URL` GitHub
-   Actions secret, and verify two consecutive scheduled runs show state
-   continuity.
+3. ~~Free a Supabase project slot... provision Postgres... verify two
+   consecutive scheduled runs~~ — done differently than planned: used
+   Neon.tech instead of Supabase (see "GitHub Actions crypto loop"
+   section above for the resolution). `DATABASE_URL` is set, both
+   workflows are live and confirmed writing to Postgres. Explicit
+   two-consecutive-runs continuity check still worth doing (see "Still
+   open" above) but the mechanism is proven working.
 4. Decide whether to iterate on Donchian (best profit factor among the
    single-symbol strategies) or Mean Reversion (best win rate/drawdown) —
    neither is validated as-is but both show more promise than Trend
