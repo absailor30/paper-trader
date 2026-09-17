@@ -186,6 +186,70 @@ code change.
   GitHub Actions runners are typically US-hosted, so this should not affect
   the scheduled workflow itself, only what could be checked from here.
 
+## Intraday stop monitoring (2026-09-17) — code + tests only, not yet backtest-verified
+
+The daily crypto cron (`crypto-cycle.yml`) checks stops once a day. Flagged
+as a real gap: a sharp intraday crash-and-recover is invisible to a
+once-daily check — the position gets held through the whole move because
+by the time the next check runs, price has already recovered. Decided
+against just polling more often without backtesting it first (that would
+repeat exactly the mistake this whole rebuild exists to fix — see "Why
+this rebuild happened" above).
+
+**What's built**, per the project's backtest-gated rule — nothing here runs
+live, or even feeds a real number into the scoreboard, until it's been
+run against real intraday data:
+
+- `Strategy.check_stop_only(position, current_price) -> bool`
+  (`paper_trader/strategy/base.py`): a lightweight stop/take-profit check
+  using only a price, no indicator recomputation — confirmed identical to
+  the stop/target check duplicated at the top of all three strategies'
+  `should_exit()`, so this is a real de-duplication, not new behavior.
+- `paper_trader/backtest/intraday_stop_engine.py`
+  (`run_intraday_stop_backtest`): entries and full (indicator-based) exits
+  stay on the daily bar — unchanged from what was validated — but the stop
+  is additionally checked against every intraday bar's low (target against
+  every bar's high) in between. Returns both a `daily_only` and a
+  `with_intraday_stops` result run against identical entries, so the
+  measured effect of intraday checking is a real number, not a guess.
+  `engine.py` itself is untouched — this is a separate module so the
+  already-validated daily engine can't regress.
+- 11 new tests (`tests/test_intraday_stop_engine.py`), 67/67 total pass.
+
+**A real finding from writing the tests**, not from real data, but worth
+recording: `should_exit()` in every strategy compares only the day's
+*close* against `stop_loss`/`take_profit` — never that day's own high or
+low. So the intraday engine can exit earlier than the daily engine even
+using a day's own already-known high/low (no fabricated finer-resolution
+data needed) whenever a take-profit or stop was touched intraday but the
+close pulled back before triggering it on a close-only check. This isn't
+a bug in the existing strategies (they were validated on close-only exits,
+and that's what the scoreboard reflects) — it's the concrete mechanism by
+which "checking more often" can matter even with the exact same OHLC data
+already being fetched daily, not only in a hypothetical crash-and-recover
+scenario. See `test_intraday_engine_also_catches_touches_within_the_reported_daily_range`.
+
+**Not done, needs real intraday data (Binance is geo-blocked from this
+sandbox — HTTP 451 — so this needs the same "environment with real
+internet" as everything else that touches Binance):**
+
+1. Pull real intraday OHLCV via the already-existing
+   `BinanceFetcher(...).fetch(symbol, start_date, interval="1h")` (no
+   fetcher changes needed — `interval` was already a parameter) for the 8
+   crypto pairs, matching the period already used for the validated daily
+   Donchian(trend100) result.
+2. Run `run_intraday_stop_backtest` for real and compare `daily_only` vs
+   `with_intraday_stops` on `total_return_pct`, `win_rate`, `profit_factor`
+   — record both, not just the "stops caught" count, since catching a stop
+   sooner isn't automatically better (it can also realize losses that
+   would have recovered by end of day).
+3. Only if that shows a real, positive difference: wire a second, more
+   frequent GitHub Actions job (e.g. every 15–30 min) calling a
+   stops-only cycle method on `CryptoTradingBot` — not yet added to
+   `crypto_orchestrator.py`, deliberately, until step 2 has a real
+   answer. `run_cycle()` (entries + full daily exit) stays on the
+   once-daily schedule regardless of this result.
+
 ## Next steps (in order)
 
 1. ~~Re-run `python run.py rotation` post-fix~~ — done, see above. US rotation
