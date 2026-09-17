@@ -229,26 +229,64 @@ which "checking more often" can matter even with the exact same OHLC data
 already being fetched daily, not only in a hypothetical crash-and-recover
 scenario. See `test_intraday_engine_also_catches_touches_within_the_reported_daily_range`.
 
-**Not done, needs real intraday data (Binance is geo-blocked from this
-sandbox — HTTP 451 — so this needs the same "environment with real
-internet" as everything else that touches Binance):**
+## Intraday stop monitoring — real-data result (2026-09-17)
 
-1. Pull real intraday OHLCV via the already-existing
-   `BinanceFetcher(...).fetch(symbol, start_date, interval="1h")` (no
-   fetcher changes needed — `interval` was already a parameter) for the 8
-   crypto pairs, matching the period already used for the validated daily
-   Donchian(trend100) result.
-2. Run `run_intraday_stop_backtest` for real and compare `daily_only` vs
-   `with_intraday_stops` on `total_return_pct`, `win_rate`, `profit_factor`
-   — record both, not just the "stops caught" count, since catching a stop
-   sooner isn't automatically better (it can also realize losses that
-   would have recovered by end of day).
-3. Only if that shows a real, positive difference: wire a second, more
-   frequent GitHub Actions job (e.g. every 15–30 min) calling a
-   stops-only cycle method on `CryptoTradingBot` — not yet added to
-   `crypto_orchestrator.py`, deliberately, until step 2 has a real
-   answer. `run_cycle()` (entries + full daily exit) stays on the
-   once-daily schedule regardless of this result.
+Run from a real-internet environment (this sandbox is Binance-blocked, see
+above) via `scripts/run_intraday_stop_backtest.py`, all 8 `crypto_pairs`,
+`interval=1h`, ~2.3 years of history (2024-10-19 to 2026-09-17),
+`Donchian(trend_filter_period=100)` — same strategy/config as the
+validated daily crypto result.
+
+| Pair | Daily-only | With intraday stops | Stops caught | Delta |
+|---|---|---|---|---|
+| BTCUSDT | +5.06% / 10tr / 60.0%wr | +4.23% / 13tr / 46.2%wr | 7 | -0.83% |
+| ETHUSDT | +0.78% / 11tr / 54.5%wr | +2.67% / 12tr / 50.0%wr | 7 | +1.89% |
+| BNBUSDT | +4.08% / 8tr / 62.5%wr | +7.51% / 12tr / 66.7%wr | 9 | +3.44% |
+| SOLUSDT | +2.03% / 9tr / 44.4%wr | +1.38% / 11tr / 45.5%wr | 6 | -0.65% |
+| XRPUSDT | +8.58% / 11tr / 45.5%wr | +19.89% / 14tr / 57.1%wr | 11 | +11.30% |
+| ADAUSDT | +1.58% / 10tr / 30.0%wr | +4.73% / 11tr / 36.4%wr | 6 | +3.14% |
+| DOGEUSDT | +9.60% / 8tr / 50.0%wr | +8.49% / 11tr / 45.5%wr | 6 | -1.12% |
+| AVAXUSDT | -2.17% / 6tr / 33.3%wr | +7.77% / 6tr / 50.0%wr | 3 | +9.93% |
+
+**5/8 pairs improved, 3/8 got worse. Average delta +3.39%, but that
+average is doing a lot of work carrying two outliers** (XRPUSDT +11.30%,
+AVAXUSDT +9.93% — together more than the sum of every other pair's delta
+combined). Take the average as directionally positive, not as "intraday
+stops add ~3.4% reliably" — on a per-pair basis this is closer to a coin
+flip with a couple of big wins than a uniform improvement.
+
+A consistent pattern worth recording plainly: every pair had **more
+trades** with intraday stops (11-14 vs 6-11 daily-only) and **win rate
+dropped or stayed flat in 6/8 cases**. This matches what the engine's own
+design intent warned about — checking more often exits faster, which
+sometimes locks in a loss that a daily-close check would have let recover
+by end of day (lower win rate), and sometimes catches a real reversal
+early (the wins). The net return improvement comes from the take-profit
+side catching upside intraday (XRP, AVAX) more than the stop side's extra
+losses cost — not from "stops are just better," a genuinely mixed result,
+not an unambiguous win.
+
+**Decision**: net positive on this sample, worth building the live
+poller — but given how outlier-driven the average is, this should be
+treated as a first real signal, not a settled edge, the same caution the
+scoreboard already applies to every other result here (a single 2024-2026
+window, not cross-validated across periods). Re-check this comparison
+periodically once the live poller has run for a while, the same way
+Donchian's daily numbers get re-run rather than trusted forever from one
+pull.
+
+**Not done yet:**
+
+1. Wire a second, more frequent GitHub Actions job (e.g. every 15-30 min)
+   calling a stops-only cycle method on `CryptoTradingBot` — not yet added
+   to `crypto_orchestrator.py`. `run_cycle()` (entries + full daily exit)
+   stays on the once-daily schedule regardless.
+2. That new job should use the SAME propose-only/`AUTO_EXECUTE` gate as
+   `run_cycle()` — no separate, looser gate for the more-frequent job.
+3. Since a stops-only job only ever closes positions (never opens new
+   ones), it needs to read/write the same persisted portfolio state as
+   `run_cycle()` (`crypto_portfolio` in `state_store.py`) so the two jobs
+   don't race or diverge on what's open.
 
 ## Next steps (in order)
 

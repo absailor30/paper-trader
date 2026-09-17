@@ -136,5 +136,78 @@ class CryptoTradingBot:
         self._save()
         return actions
 
+    def check_stops_only(self) -> List[dict]:
+        """A lightweight, more-frequent companion to run_cycle() -- checks
+        every open position's stop-loss/take-profit against the CURRENT
+        price via Strategy.check_stop_only(), and exits any that are
+        breached. Never opens a new position and never runs the full
+        (indicator-based) should_exit() -- that stays exclusively on
+        run_cycle()'s once-daily schedule, unchanged.
+
+        Why this exists: CHECKPOINT.md's "Intraday stop monitoring" real
+        backtest (2026-09-17) showed 5/8 crypto pairs improved (avg
+        +3.39%, but outlier-driven -- XRPUSDT and AVAXUSDT alone account
+        for most of it) when stops were checked more often than once a
+        day. Treat that as a first real signal, not a settled edge --
+        this method exists so a separate, more frequent GitHub Actions
+        job can act on it without touching the validated once-daily
+        entry/full-exit cycle at all.
+
+        Uses the SAME crypto_portfolio state and the SAME
+        AUTO_EXECUTE/propose-only gate as run_cycle() -- no separate,
+        looser gate for this more-frequent job -- and the same
+        found = self.trader.load(...) in __init__ means both this and
+        run_cycle() always act on the latest saved state, so the two
+        jobs can't diverge on what's open even running on independent
+        schedules.
+        """
+        today = datetime.now().strftime("%Y-%m-%d")
+        actions: List[dict] = []
+
+        if not self.trader.portfolio.positions:
+            return actions
+
+        symbols = list(self.trader.portfolio.positions.keys())
+        data = self.fetcher.fetch_many(symbols, start_date=(datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d"))
+
+        for symbol, position in list(self.trader.portfolio.positions.items()):
+            df = data.get(symbol)
+            if df is None or df.empty:
+                continue
+            price = float(df["close"].iloc[-1])
+            pos_obj = Position(
+                symbol=symbol,
+                quantity=position["quantity"],
+                entry_price=position["entry_price"],
+                current_price=price,
+                entry_time=position["entry_time"],
+                strategy_name=position["strategy"],
+                stop_loss=position.get("stop_loss"),
+                take_profit=position.get("take_profit"),
+            )
+            if not self.strategy.check_stop_only(pos_obj, price):
+                continue
+
+            # Same client_order_id shape family as run_cycle()'s SELL, but
+            # tagged INTRADAY so it's distinguishable in the trade log and
+            # so it can never collide with (or double-fire against) a
+            # same-day full-cycle SELL's id -- place_order()'s
+            # idempotent-by-client_order_id guarantee still protects
+            # against this method itself firing twice in one day.
+            client_order_id = f"{symbol}:{self.strategy.name}:{today}:INTRADAY-SELL"
+            if settings.auto_execute:
+                order = self.trader.place_order(
+                    client_order_id, symbol, "SELL", position["quantity"], price,
+                    self.strategy.name, reasoning="check_stop_only triggered (intraday poll)",
+                )
+                actions.append({"action": "EXECUTED", **order})
+            else:
+                actions.append({"action": "PROPOSED_SELL", "symbol": symbol, "price": price, "quantity": position["quantity"]})
+                logger.info(f"[PROPOSE-ONLY] Would SELL (intraday stop) {position['quantity']} {symbol} @ {price:.2f}")
+
+        if actions:
+            self._save()
+        return actions
+
     def _save(self):
         self.trader.save("crypto_portfolio")
