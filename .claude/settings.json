@@ -2,11 +2,7 @@
   "sandbox": {
     "enabled": true,
     "network": {
-      "allowedDomains": [
-        "github.com",
-        "registry.npmjs.org",
-        "*.npmjs.org"
-      ]
+      "allowedDomains": ["*"]
     }
   }
 }
