@@ -277,6 +277,49 @@ auto-execute behavior and that state persists across bot restarts —
   historical backtest data and one blocked live cycle). That's the next
   required step before considering real execution at all.
 
+## Next: make the crypto loop run independent of any laptop (not yet built)
+
+Decided direction after discussing hosting options: a long-running process
+or an always-on VM is more than this needs, since the strategy only
+decides once per day. The right shape is a **scheduled, stateless job**:
+
+1. **GitHub Actions workflow** (`.github/workflows/` — not yet created)
+   on a daily `cron` schedule, running `python run.py crypto` (single
+   cycle, not `--loop`) unmodified. Each run is a fresh, throwaway VM —
+   nothing persists on disk between runs, and no process needs to survive
+   overnight; today's run and tomorrow's run share no state except
+   through the database.
+2. **This means `DATABASE_URL` must point at a real external Postgres**,
+   not the local SQLite default (`sqlite:///paper_trader.db`). SQLite on
+   a GitHub Actions runner gets wiped every run — the bot would forget
+   its positions and restart from scratch daily, silently, which would
+   make every scoreboard number meaningless. `state_store.py` already
+   works against Postgres via `DATABASE_URL` (same code path prod used
+   for the old system) — this is config, not new code.
+3. Concretely still to do:
+   - Provision a Postgres instance (Supabase Postgres is a fine fit —
+     just used as a database here, nothing else about Supabase is
+     relevant) and get its connection string
+   - Add `DATABASE_URL` as a GitHub Actions secret
+   - Write the workflow file (checkout, install deps, run
+     `python run.py crypto`, on a `schedule: cron` trigger)
+   - Verify: two consecutive scheduled runs should show continuity
+     (day 2's state reflects day 1's proposed/executed trades), not a
+     reset
+
+Why this over the alternatives considered: Vercel and Supabase Edge
+Functions are both wrong fits for a scheduled Python batch job — Vercel
+functions are built for short HTTP request/response, not cron batch runs;
+Supabase Edge Functions run Deno/TypeScript, not Python, so the strategy
+code would need a rewrite or an awkward cross-language call-out. An
+always-on VM (EC2/DigitalOcean, ~$5-6/mo) would also work but is more
+infrastructure than a once-a-day decision needs.
+
+This session's sandbox has no outbound network at all (confirmed
+repeatedly throughout this project), so none of the above can be
+built/tested here. Handing off to continue with a tool that has real
+internet + Supabase access.
+
 ## Other work this session
 
 - Sanity-checked the rotation trade log end-to-end against a synthetic
