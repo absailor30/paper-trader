@@ -237,6 +237,46 @@ that it survives leverage or funding cost. Needs a proper margin-aware
 backtest before any futures number is trustworthy for real leverage.
 No crypto-native strategy (funding-rate carry, etc.) built yet either.
 
+## Crypto autonomous loop (2026-09-17)
+
+Backtesting proved which strategy to use; it did not build anything that
+runs by itself. This closes that gap: `CryptoTradingBot`
+(`paper_trader/crypto_orchestrator.py`) is a live paper-trading loop for
+Binance spot, mirroring `TradingBot` (the stock orchestrator) but:
+- data via `BinanceFetcher(market="spot")` instead of yfinance
+- one market ("CRYPTO"), `settings.crypto_pairs`, the strategy proven
+  above (`DonchianBreakoutStrategy(trend_filter_period=100)`)
+- purely fractional position sizing (no integer-share constraint)
+- same idempotent-by-`client_order_id`, same PROPOSE-ONLY-unless-
+  `AUTO_EXECUTE` gate, same risk circuit breakers as the stock bot
+
+`python run.py crypto` runs one cycle; `python run.py crypto --loop
+--interval-hours 24` runs forever, sleeping between cycles, catching and
+logging any single cycle's failure so a network blip doesn't kill a
+process meant to run unattended for days. Verified in the sandbox that it
+correctly reaches the real Binance API (blocked only by this sandbox's
+network policy, same as every other real-data check in this project) and
+that propose-only mode produces zero trades. 4 new tests against synthetic
+breakout data (isolated SQLite, mocked fetcher) confirm propose-only vs
+auto-execute behavior and that state persists across bot restarts —
+56/56 tests total pass.
+
+**Not done yet:**
+- No scheduler beyond the `--loop`/`sleep` inside the process itself —
+  if the process dies (crash, laptop sleep, reboot) nothing restarts it.
+  For real unattended operation this needs OS-level supervision (a
+  systemd service, Task Scheduler, or a process manager), not just this
+  loop.
+- Zero real Binance order execution. `BinanceFetcher` only reads public
+  market data. There is no code anywhere that authenticates to Binance
+  or places an order, paper or real. `AUTO_EXECUTE=true` today only
+  means "the `PaperTrader` simulates a fill" — it does not send
+  anything to Binance.
+- No live paper-trading track record exists yet — the loop above has
+  never actually been run for real time (only smoke-tested against
+  historical backtest data and one blocked live cycle). That's the next
+  required step before considering real execution at all.
+
 ## Other work this session
 
 - Sanity-checked the rotation trade log end-to-end against a synthetic
