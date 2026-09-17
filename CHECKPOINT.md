@@ -129,24 +129,85 @@ the benchmark. India stays not validated — same fix applied, still a real
 gap (+5.24% vs +49.88%), so the edge there (if any) is universe-specific, not
 a residual bug.
 
+## Re-run confirmation (2026-09-17, from an environment with real internet + Supabase access)
+
+This is the handoff environment the previous session asked for. Confirmed
+network access here: yfinance works, Binance is geo-blocked (HTTP 451) from
+this sandbox specifically — so the crypto backtest/loop numbers below are
+carried over from the prior session, not re-verified here; everything else
+was re-run fresh.
+
+- `pytest tests/` — 56/56 pass (was 56/56).
+- `python run.py backtest` (full US+India+commodities, 42 symbols x 3
+  strategies) re-run against live data. Donchian now uses
+  `trend_filter_period=100` as the checkpointed default (previously flagged
+  as "not yet re-run with the new default"):
+  - Trend Following: 3/42 validated, 26.3% avg win rate, PF 1.47, DD -2.72%
+  - Mean Reversion: 0/42 validated, 52.9% avg win rate, PF 1.72, DD -2.14%
+  - **Donchian (trend100): 5/42 validated**, 43.6% avg win rate, PF 1.64,
+    DD -3.16% — confirms the sweep's prediction (was stale at 3/42 pre-fix).
+- `python run.py rotation` (US 24 + India 15) re-run:
+  - US: **+149.56% vs +119.32% benchmark**, CAGR +22.58%, Sharpe 1.01, max
+    DD -28.87%, 54 rebalances, 523 trades — **POSITIVE EDGE, reconfirmed**
+    (checkpoint had +143.37%/+116.10%; same result within normal drift from
+    a few more trading days of data).
+  - India: +5.79% vs +50.73% benchmark, CAGR +1.26%, Sharpe 0.16, max DD
+    -25.08%, 54 rebalances, 503 trades — **not validated, reconfirmed**.
+
+Net: nothing changed directionally. US Momentum Rotation is the one
+strategy with a demonstrated, twice-confirmed edge; Donchian
+(trend100) is the best single-symbol strategy but still short of the
+validation bar; India rotation and all other single-symbol strategies
+remain unvalidated.
+
+## GitHub Actions crypto loop (2026-09-17)
+
+Added `.github/workflows/crypto-cycle.yml` — daily cron (00:10 UTC) plus
+manual `workflow_dispatch`, running `python run.py crypto` (single cycle)
+against `DATABASE_URL` from a repo secret. This is the "make the crypto
+loop run independent of any laptop" plan from the previous session, now
+actually wired up. `AUTO_EXECUTE` reads from a repo variable, defaulting to
+`false` — same propose-only gate as everywhere else, controlled without a
+code change.
+
+**Not yet done:**
+- `DATABASE_URL` secret not yet set — needs a Postgres connection string.
+  Supabase was the intended host, but the account's free tier only allows 2
+  active projects and both slots are currently used by unrelated projects
+  (`social-poster`, `checklist-at-restaurant`); a third project could not be
+  provisioned here. Needs the account owner to free a slot (pause/delete an
+  existing project, or upgrade) before a project — and its `DATABASE_URL` —
+  can be created and added as a secret.
+- Because of the above, no scheduled run has actually executed yet, so
+  "two consecutive runs show state continuity" is still unverified.
+- Binance is geo-blocked from this sandbox (HTTP 451 on
+  `api.binance.com`), so the crypto strategy itself couldn't be re-validated
+  here — only the equities/rotation numbers were reconfirmed this session.
+  GitHub Actions runners are typically US-hosted, so this should not affect
+  the scheduled workflow itself, only what could be checked from here.
+
 ## Next steps (in order)
 
 1. ~~Re-run `python run.py rotation` post-fix~~ — done, see above. US rotation
    validated; India did not.
-2. Sanity-check US Momentum Rotation isn't a one-window fluke: rotation was
-   already validated on a single 2022-2026 run — worth confirming the result
-   holds before treating it as trustworthy (e.g. re-check trade log for any
-   remaining silent-rejection artifacts, consider a second date range if
-   feasible).
-3. Decide whether to iterate on Donchian (best profit factor among the
+2. ~~Sanity-check US Momentum Rotation isn't a one-window fluke~~ — done,
+   see "Re-run confirmation" above: reconfirmed on a fresh data pull,
+   +149.56% vs +119.32% benchmark, consistent with the prior run.
+3. Free a Supabase project slot (pause or delete `social-poster` or
+   `checklist-at-restaurant`, or upgrade the plan), then provision the
+   Postgres project, add its connection string as the `DATABASE_URL` GitHub
+   Actions secret, and verify two consecutive scheduled runs show state
+   continuity.
+4. Decide whether to iterate on Donchian (best profit factor among the
    single-symbol strategies) or Mean Reversion (best win rate/drawdown) —
    neither is validated as-is but both show more promise than Trend
    Following.
-4. Once US Momentum Rotation's result is double-checked: run `python run.py
-   cycle` in propose-only mode for a while and sanity-check proposals before
-   flipping `AUTO_EXECUTE=true` for that strategy specifically (not the
-   others — they're still unvalidated).
-5. Only after that: decide whether/what to merge into `main`, and whether to
+5. Once the crypto loop has a real multi-day track record: run `python
+   run.py cycle` in propose-only mode for the equities side too, and
+   sanity-check proposals before flipping `AUTO_EXECUTE=true` for US
+   Momentum Rotation specifically (not the others — they're still
+   unvalidated).
+6. Only after that: decide whether/what to merge into `main`, and whether to
    re-add Telegram/dashboard/deployment on top.
 
 ## Donchian iteration (2026-09-16, prep for tomorrow's real-data session)
