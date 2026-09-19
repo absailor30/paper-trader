@@ -475,10 +475,14 @@ run.py cycle --market US` reaches yfinance correctly (blocked only by
 this sandbox's network policy, same pattern as every other real-data
 check here).
 
-**Stocks are otherwise in the same state as crypto was before this
-session's loop work**: `python run.py cycle` is a manual one-shot, no
-scheduler, no unattended run. It belongs in the same GitHub Actions plan
-below rather than a separate one — see the next section.
+**Update**: added `.github/workflows/stocks-cycle.yml`, mirroring Cowork's
+`crypto-cycle.yml` — runs `python run.py cycle` (both US and India in one
+call) on a weekday cron (21:30 UTC, after both markets have closed for
+the day) against the same Postgres `DATABASE_URL` secret Cowork already
+confirmed live for crypto. Not yet verified running for real (this
+sandbox still has no outbound network) — next check-in should confirm it
+actually fires and that state persists across two consecutive scheduled
+runs, same bar Cowork already cleared for crypto.
 
 ## Next: make both the crypto and stock loops run independent of any laptop (not yet built)
 
