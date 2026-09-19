@@ -277,7 +277,31 @@ auto-execute behavior and that state persists across bot restarts —
   historical backtest data and one blocked live cycle). That's the next
   required step before considering real execution at all.
 
-## Next: make the crypto loop run independent of any laptop (not yet built)
+## Stocks: fixed live loop to use the proven strategy (2026-09-19)
+
+Found a real bug while extending scheduling to stocks: `orchestrator.py`'s
+`TradingBot` (the live US/India paper-trading loop, `python run.py
+cycle`) was still hardcoded to `TrendFollowingStrategy()` — the weakest
+strategy on every axis in the "Strategy scoreboard" above. The backtest
+script (`run_backtest.py`) had already been updated to default to
+`DonchianBreakoutStrategy(trend_filter_period=100)`, but that fix never
+made it into the actual live bot. Fixed now: `TradingBot.__init__` uses
+the same Donchian+trend100 strategy as crypto and the backtest default.
+
+Also added `tests/test_orchestrator.py` (4 tests: strategy identity,
+propose-only default, auto-execute places a real order, state persists
+across bot restarts) — there was no test coverage of `TradingBot` at all
+before this. 60/60 tests total pass. Verified in-sandbox that `python
+run.py cycle --market US` reaches yfinance correctly (blocked only by
+this sandbox's network policy, same pattern as every other real-data
+check here).
+
+**Stocks are otherwise in the same state as crypto was before this
+session's loop work**: `python run.py cycle` is a manual one-shot, no
+scheduler, no unattended run. It belongs in the same GitHub Actions plan
+below rather than a separate one — see the next section.
+
+## Next: make both the crypto and stock loops run independent of any laptop (not yet built)
 
 Decided direction after discussing hosting options: a long-running process
 or an always-on VM is more than this needs, since the strategy only
@@ -285,10 +309,14 @@ decides once per day. The right shape is a **scheduled, stateless job**:
 
 1. **GitHub Actions workflow** (`.github/workflows/` — not yet created)
    on a daily `cron` schedule, running `python run.py crypto` (single
-   cycle, not `--loop`) unmodified. Each run is a fresh, throwaway VM —
+   cycle, not `--loop`) AND `python run.py cycle` (stocks, both US and
+   India in one call) unmodified. Each run is a fresh, throwaway VM —
    nothing persists on disk between runs, and no process needs to survive
    overnight; today's run and tomorrow's run share no state except
-   through the database.
+   through the database. Crypto trades 24/7 so any daily time works;
+   stocks should run once after US/India market close so the day's bar is
+   final when fetched — two cron entries (or one workflow, two jobs) with
+   different times, not one schedule for both.
 2. **This means `DATABASE_URL` must point at a real external Postgres**,
    not the local SQLite default (`sqlite:///paper_trader.db`). SQLite on
    a GitHub Actions runner gets wiped every run — the bot would forget

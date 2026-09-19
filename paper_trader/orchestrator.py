@@ -17,7 +17,7 @@ from paper_trader.config import settings
 from paper_trader.data.fetcher import DataFetcher
 from paper_trader.execution.paper_trader import PaperTrader
 from paper_trader.strategy.base import Position
-from paper_trader.strategy.trend_following import TrendFollowingStrategy
+from paper_trader.strategy.donchian_breakout import DonchianBreakoutStrategy
 
 MARKETS = {
     "US": {"symbols": settings.us_stocks, "capital": settings.us_capital, "india": False},
@@ -28,7 +28,11 @@ MARKETS = {
 class TradingBot:
     def __init__(self):
         self.fetcher = DataFetcher()
-        self.strategy = TrendFollowingStrategy()
+        # Donchian + 100d trend filter is the proven strategy across US,
+        # India and commodities (see CHECKPOINT.md "Strategy scoreboard"
+        # and "Donchian iteration") -- Trend Following, used here before,
+        # was the weakest of the three on every axis.
+        self.strategy = DonchianBreakoutStrategy(trend_filter_period=100)
         self.traders = {
             market: PaperTrader(
                 initial_capital=cfg["capital"],
