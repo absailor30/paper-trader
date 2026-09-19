@@ -34,10 +34,21 @@ class DataFetcher:
         start_date: str,
         end_date: Optional[str] = None,
         india: bool = False,
+        interval: str = "1d",
     ) -> pd.DataFrame:
+        # interval defaults to "1d" -- every existing caller (orchestrator,
+        # run_backtest, rotation) is unaffected. Intraday intervals (e.g.
+        # "1h") are for scripts/run_intraday_stop_backtest_stocks.py; note
+        # yfinance itself caps how far back intraday intervals go (60d for
+        # sub-hourly, ~730d for "1h") -- a too-long start_date with a fine
+        # interval will just come back with less history than requested,
+        # not an error.
         ticker = symbol if not india or symbol.endswith((".NS", ".BO")) else f"{symbol}.NS"
         try:
-            raw = yf.download(ticker, start=start_date, end=end_date, progress=False, auto_adjust=True)
+            raw = yf.download(
+                ticker, start=start_date, end=end_date, interval=interval,
+                progress=False, auto_adjust=True,
+            )
             return normalize(raw, symbol)
         except Exception as e:
             logger.error(f"Failed to fetch data for {symbol}: {e}")
@@ -49,10 +60,11 @@ class DataFetcher:
         start_date: str,
         end_date: Optional[str] = None,
         india: bool = False,
+        interval: str = "1d",
     ) -> Dict[str, pd.DataFrame]:
         results = {}
         for symbol in symbols:
-            df = self.fetch(symbol, start_date, end_date, india=india)
+            df = self.fetch(symbol, start_date, end_date, india=india, interval=interval)
             if not df.empty:
                 results[symbol] = df
             else:

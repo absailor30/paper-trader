@@ -12,7 +12,11 @@ Usage:
     python scripts/run_intraday_stop_backtest.py --interval 1h --days 900
 """
 import argparse
+import sys
 from datetime import datetime, timedelta
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from loguru import logger
 

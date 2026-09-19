@@ -567,6 +567,38 @@ directly. Before trusting this to actually catch a crash in real time,
 that assumption needs checking against a live market-hours run, not just
 these synthetic-data tests.
 
+**Backtest infrastructure now built** (2026-09-19), same handoff pattern
+as everything else that needs real internet:
+- `DataFetcher.fetch()`/`fetch_many()` gained an `interval` param
+  (default `"1d"`, every existing caller unaffected) so intraday bars
+  (e.g. `"1h"`) can be pulled for stocks the same way `BinanceFetcher`
+  already supports for crypto. yfinance itself caps intraday history
+  (~730d for `1h`, much less for finer intervals) — a too-long window
+  just returns less data, not an error.
+- `scripts/run_intraday_stop_backtest_stocks.py`, mirroring
+  `run_intraday_stop_backtest.py`'s crypto version — runs
+  `intraday_stop_engine.py`'s daily-only vs. with-intraday-stops
+  comparison across `us`/`india` (or `--symbols`), `Donchian(trend_filter
+  _period=100)`, prints the same delta-return table.
+- 4 new tests (`tests/test_fetcher.py`) covering the new `interval`
+  plumbing (mocked `yf.download`, no network needed). 89/89 total pass.
+- **Found and fixed a real bug while testing this**: both intraday-stop
+  runner scripts (`run_intraday_stop_backtest.py` and the new stocks
+  version) raised `ModuleNotFoundError: No module named 'paper_trader'`
+  when run as `python scripts/run_intraday_stop_backtest.py` — running a
+  script from a subdirectory doesn't put the project root on `sys.path`.
+  The crypto script's own docstring admitted "has never actually
+  executed against real data," which is exactly why this was never
+  caught. Fixed both with an explicit `sys.path.insert` at the top;
+  verified both now run correctly up to the network call (blocked only
+  by this sandbox's policy, confirmed by running them here).
+
+**Still not done**: neither script has been run against real data yet —
+that needs an environment with real internet (same handoff as every
+other real-data step in this project). Until that real run happens and
+gets recorded here, the stock intraday-stop poller remains an unvalidated
+mechanism, not a proven improvement, exactly as flagged above.
+
 ## Other work this session
 
 - Sanity-checked the rotation trade log end-to-end against a synthetic
