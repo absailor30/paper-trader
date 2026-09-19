@@ -57,6 +57,17 @@ def main():
         "--interval-hours", type=float, default=24.0,
         help="Hours to sleep between cycles when --loop is set (default: 24, matches the daily-bar strategy)",
     )
+    crypto_parser.add_argument(
+        "--stops-only", action="store_true",
+        help=(
+            "Run only CryptoTradingBot.check_stops_only() instead of the full cycle -- "
+            "checks open positions' stop/take-profit against the current price and exits "
+            "on a breach, never opens a new position. Meant for a separate, more frequent "
+            "schedule than the once-daily full cycle; see CHECKPOINT.md 'Intraday stop "
+            "monitoring'. Not combinable with --loop (looping the full cycle already covers "
+            "this; loop the stops-only check via its own scheduler/cron instead)."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -76,6 +87,14 @@ def main():
     if args.command == "crypto":
         logger.info(f"AUTO_EXECUTE={settings.auto_execute}")
         bot = CryptoTradingBot()
+
+        if args.stops_only:
+            if args.loop:
+                raise SystemExit("--stops-only and --loop cannot be combined; see --stops-only's help text")
+            actions = bot.check_stops_only()
+            print(json.dumps(actions, indent=2, default=str))
+            return
+
         if not args.loop:
             actions = bot.run_cycle()
             print(json.dumps(actions, indent=2, default=str))

@@ -129,24 +129,203 @@ the benchmark. India stays not validated — same fix applied, still a real
 gap (+5.24% vs +49.88%), so the edge there (if any) is universe-specific, not
 a residual bug.
 
+## Re-run confirmation (2026-09-17, from an environment with real internet + Supabase access)
+
+This is the handoff environment the previous session asked for. Confirmed
+network access here: yfinance works, Binance is geo-blocked (HTTP 451) from
+this sandbox specifically — so the crypto backtest/loop numbers below are
+carried over from the prior session, not re-verified here; everything else
+was re-run fresh.
+
+- `pytest tests/` — 56/56 pass (was 56/56).
+- `python run.py backtest` (full US+India+commodities, 42 symbols x 3
+  strategies) re-run against live data. Donchian now uses
+  `trend_filter_period=100` as the checkpointed default (previously flagged
+  as "not yet re-run with the new default"):
+  - Trend Following: 3/42 validated, 26.3% avg win rate, PF 1.47, DD -2.72%
+  - Mean Reversion: 0/42 validated, 52.9% avg win rate, PF 1.72, DD -2.14%
+  - **Donchian (trend100): 5/42 validated**, 43.6% avg win rate, PF 1.64,
+    DD -3.16% — confirms the sweep's prediction (was stale at 3/42 pre-fix).
+- `python run.py rotation` (US 24 + India 15) re-run:
+  - US: **+149.56% vs +119.32% benchmark**, CAGR +22.58%, Sharpe 1.01, max
+    DD -28.87%, 54 rebalances, 523 trades — **POSITIVE EDGE, reconfirmed**
+    (checkpoint had +143.37%/+116.10%; same result within normal drift from
+    a few more trading days of data).
+  - India: +5.79% vs +50.73% benchmark, CAGR +1.26%, Sharpe 0.16, max DD
+    -25.08%, 54 rebalances, 503 trades — **not validated, reconfirmed**.
+
+Net: nothing changed directionally. US Momentum Rotation is the one
+strategy with a demonstrated, twice-confirmed edge; Donchian
+(trend100) is the best single-symbol strategy but still short of the
+validation bar; India rotation and all other single-symbol strategies
+remain unvalidated.
+
+## GitHub Actions crypto loop (2026-09-17)
+
+Added `.github/workflows/crypto-cycle.yml` — daily cron (00:10 UTC) plus
+manual `workflow_dispatch`, running `python run.py crypto` (single cycle)
+against `DATABASE_URL` from a repo secret. This is the "make the crypto
+loop run independent of any laptop" plan from the previous session, now
+actually wired up. `AUTO_EXECUTE` reads from a repo variable, defaulting to
+`false` — same propose-only gate as everywhere else, controlled without a
+code change.
+
+**Resolved (2026-09-18):** Supabase's 2-project cap turned out to be a dead
+end (see "Vercel/Neon" note below) — switched to Neon.tech instead.
+`DATABASE_URL` is set as a GitHub Actions secret pointing at a real Neon
+Postgres instance. The repo's default branch was changed from `main` to
+`rebuild/v2` (GitHub only discovers/runs workflow files that exist on the
+default branch — this is why both workflows initially showed "0 workflows
+found" despite existing on `rebuild/v2`). Both `crypto-cycle.yml` and
+`crypto-intraday-stops.yml` have since run successfully. Confirmed via
+Neon's SQL Editor: a `crypto_portfolio` row exists (`capital: 1000.0,
+positions: {}, trade_history: [], ...`, `updated_at: 2026-09-17
+20:00:45`), proving the full path — Actions runner → `DATABASE_URL` →
+Neon Postgres — works end to end. Empty positions/unchanged capital is
+expected here: propose-only mode (`AUTO_EXECUTE` unset/false by default),
+no qualifying Donchian breakout on that run.
+
+**Still open:**
+- "Two consecutive scheduled runs show state continuity" (day 2 reflecting
+  day 1's state, not a reset) has not been explicitly demonstrated yet —
+  only one state snapshot has been observed so far. Both crons are live
+  (daily + every-30-min), so this should confirm itself passively; worth
+  a deliberate before/after check rather than assuming it from one snapshot.
+- The Neon connection string (including its password) was pasted in plain
+  text in chat during setup. Recommend rotating the Neon database password
+  from the Neon dashboard and updating the `DATABASE_URL` secret to match.
+- Binance is geo-blocked from this sandbox (HTTP 451 on
+  `api.binance.com`), so the crypto strategy itself couldn't be re-validated
+  here — only the equities/rotation numbers were reconfirmed this session.
+  GitHub Actions runners are typically US-hosted, so this should not affect
+  the scheduled workflow itself, only what could be checked from here.
+
+## Intraday stop monitoring (2026-09-17) — code + tests only, not yet backtest-verified
+
+The daily crypto cron (`crypto-cycle.yml`) checks stops once a day. Flagged
+as a real gap: a sharp intraday crash-and-recover is invisible to a
+once-daily check — the position gets held through the whole move because
+by the time the next check runs, price has already recovered. Decided
+against just polling more often without backtesting it first (that would
+repeat exactly the mistake this whole rebuild exists to fix — see "Why
+this rebuild happened" above).
+
+**What's built**, per the project's backtest-gated rule — nothing here runs
+live, or even feeds a real number into the scoreboard, until it's been
+run against real intraday data:
+
+- `Strategy.check_stop_only(position, current_price) -> bool`
+  (`paper_trader/strategy/base.py`): a lightweight stop/take-profit check
+  using only a price, no indicator recomputation — confirmed identical to
+  the stop/target check duplicated at the top of all three strategies'
+  `should_exit()`, so this is a real de-duplication, not new behavior.
+- `paper_trader/backtest/intraday_stop_engine.py`
+  (`run_intraday_stop_backtest`): entries and full (indicator-based) exits
+  stay on the daily bar — unchanged from what was validated — but the stop
+  is additionally checked against every intraday bar's low (target against
+  every bar's high) in between. Returns both a `daily_only` and a
+  `with_intraday_stops` result run against identical entries, so the
+  measured effect of intraday checking is a real number, not a guess.
+  `engine.py` itself is untouched — this is a separate module so the
+  already-validated daily engine can't regress.
+- 11 new tests (`tests/test_intraday_stop_engine.py`), 67/67 total pass.
+
+**A real finding from writing the tests**, not from real data, but worth
+recording: `should_exit()` in every strategy compares only the day's
+*close* against `stop_loss`/`take_profit` — never that day's own high or
+low. So the intraday engine can exit earlier than the daily engine even
+using a day's own already-known high/low (no fabricated finer-resolution
+data needed) whenever a take-profit or stop was touched intraday but the
+close pulled back before triggering it on a close-only check. This isn't
+a bug in the existing strategies (they were validated on close-only exits,
+and that's what the scoreboard reflects) — it's the concrete mechanism by
+which "checking more often" can matter even with the exact same OHLC data
+already being fetched daily, not only in a hypothetical crash-and-recover
+scenario. See `test_intraday_engine_also_catches_touches_within_the_reported_daily_range`.
+
+## Intraday stop monitoring — real-data result (2026-09-17)
+
+Run from a real-internet environment (this sandbox is Binance-blocked, see
+above) via `scripts/run_intraday_stop_backtest.py`, all 8 `crypto_pairs`,
+`interval=1h`, ~2.3 years of history (2024-10-19 to 2026-09-17),
+`Donchian(trend_filter_period=100)` — same strategy/config as the
+validated daily crypto result.
+
+| Pair | Daily-only | With intraday stops | Stops caught | Delta |
+|---|---|---|---|---|
+| BTCUSDT | +5.06% / 10tr / 60.0%wr | +4.23% / 13tr / 46.2%wr | 7 | -0.83% |
+| ETHUSDT | +0.78% / 11tr / 54.5%wr | +2.67% / 12tr / 50.0%wr | 7 | +1.89% |
+| BNBUSDT | +4.08% / 8tr / 62.5%wr | +7.51% / 12tr / 66.7%wr | 9 | +3.44% |
+| SOLUSDT | +2.03% / 9tr / 44.4%wr | +1.38% / 11tr / 45.5%wr | 6 | -0.65% |
+| XRPUSDT | +8.58% / 11tr / 45.5%wr | +19.89% / 14tr / 57.1%wr | 11 | +11.30% |
+| ADAUSDT | +1.58% / 10tr / 30.0%wr | +4.73% / 11tr / 36.4%wr | 6 | +3.14% |
+| DOGEUSDT | +9.60% / 8tr / 50.0%wr | +8.49% / 11tr / 45.5%wr | 6 | -1.12% |
+| AVAXUSDT | -2.17% / 6tr / 33.3%wr | +7.77% / 6tr / 50.0%wr | 3 | +9.93% |
+
+**5/8 pairs improved, 3/8 got worse. Average delta +3.39%, but that
+average is doing a lot of work carrying two outliers** (XRPUSDT +11.30%,
+AVAXUSDT +9.93% — together more than the sum of every other pair's delta
+combined). Take the average as directionally positive, not as "intraday
+stops add ~3.4% reliably" — on a per-pair basis this is closer to a coin
+flip with a couple of big wins than a uniform improvement.
+
+A consistent pattern worth recording plainly: every pair had **more
+trades** with intraday stops (11-14 vs 6-11 daily-only) and **win rate
+dropped or stayed flat in 6/8 cases**. This matches what the engine's own
+design intent warned about — checking more often exits faster, which
+sometimes locks in a loss that a daily-close check would have let recover
+by end of day (lower win rate), and sometimes catches a real reversal
+early (the wins). The net return improvement comes from the take-profit
+side catching upside intraday (XRP, AVAX) more than the stop side's extra
+losses cost — not from "stops are just better," a genuinely mixed result,
+not an unambiguous win.
+
+**Decision**: net positive on this sample, worth building the live
+poller — but given how outlier-driven the average is, this should be
+treated as a first real signal, not a settled edge, the same caution the
+scoreboard already applies to every other result here (a single 2024-2026
+window, not cross-validated across periods). Re-check this comparison
+periodically once the live poller has run for a while, the same way
+Donchian's daily numbers get re-run rather than trusted forever from one
+pull.
+
+**Not done yet:**
+
+1. Wire a second, more frequent GitHub Actions job (e.g. every 15-30 min)
+   calling a stops-only cycle method on `CryptoTradingBot` — not yet added
+   to `crypto_orchestrator.py`. `run_cycle()` (entries + full daily exit)
+   stays on the once-daily schedule regardless.
+2. That new job should use the SAME propose-only/`AUTO_EXECUTE` gate as
+   `run_cycle()` — no separate, looser gate for the more-frequent job.
+3. Since a stops-only job only ever closes positions (never opens new
+   ones), it needs to read/write the same persisted portfolio state as
+   `run_cycle()` (`crypto_portfolio` in `state_store.py`) so the two jobs
+   don't race or diverge on what's open.
+
 ## Next steps (in order)
 
 1. ~~Re-run `python run.py rotation` post-fix~~ — done, see above. US rotation
    validated; India did not.
-2. Sanity-check US Momentum Rotation isn't a one-window fluke: rotation was
-   already validated on a single 2022-2026 run — worth confirming the result
-   holds before treating it as trustworthy (e.g. re-check trade log for any
-   remaining silent-rejection artifacts, consider a second date range if
-   feasible).
-3. Decide whether to iterate on Donchian (best profit factor among the
+2. ~~Sanity-check US Momentum Rotation isn't a one-window fluke~~ — done,
+   see "Re-run confirmation" above: reconfirmed on a fresh data pull,
+   +149.56% vs +119.32% benchmark, consistent with the prior run.
+3. ~~Free a Supabase project slot... provision Postgres... verify two
+   consecutive scheduled runs~~ — done differently than planned: used
+   Neon.tech instead of Supabase (see "GitHub Actions crypto loop"
+   section above for the resolution). `DATABASE_URL` is set, both
+   workflows are live and confirmed writing to Postgres. Explicit
+   two-consecutive-runs continuity check still worth doing (see "Still
+   open" above) but the mechanism is proven working.
+4. Decide whether to iterate on Donchian (best profit factor among the
    single-symbol strategies) or Mean Reversion (best win rate/drawdown) —
    neither is validated as-is but both show more promise than Trend
    Following.
-4. Once US Momentum Rotation's result is double-checked: run `python run.py
-   cycle` in propose-only mode for a while and sanity-check proposals before
-   flipping `AUTO_EXECUTE=true` for that strategy specifically (not the
-   others — they're still unvalidated).
-5. Only after that: decide whether/what to merge into `main`, and whether to
+5. Once the crypto loop has a real multi-day track record: run `python
+   run.py cycle` in propose-only mode for the equities side too, and
+   sanity-check proposals before flipping `AUTO_EXECUTE=true` for US
+   Momentum Rotation specifically (not the others — they're still
+   unvalidated).
+6. Only after that: decide whether/what to merge into `main`, and whether to
    re-add Telegram/dashboard/deployment on top.
 
 ## Donchian iteration (2026-09-16, prep for tomorrow's real-data session)
