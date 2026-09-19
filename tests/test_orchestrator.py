@@ -71,3 +71,113 @@ def test_state_persists_across_bot_instances(monkeypatch):
 
     bot2 = TradingBot()
     assert "AAPL" in bot2.traders["US"].portfolio.positions
+
+
+class TestCheckStopsOnly:
+    """TradingBot.check_stops_only() -- the more-frequent companion to
+    run_market_cycle(), mirroring CryptoTradingBot.check_stops_only().
+    Must never open a position, must only act via
+    Strategy.check_stop_only (price vs stop/target), and must share state
+    with run_market_cycle() rather than diverging."""
+
+    def test_no_open_positions_produces_no_actions_and_no_fetch(self, monkeypatch):
+        bot = TradingBot()
+        fetch_called = []
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: fetch_called.append(1) or {})
+
+        actions = bot.check_stops_only("US")
+
+        assert actions == []
+        assert fetch_called == [], "should not even fetch data when there's nothing open to check"
+
+    def test_price_above_stop_produces_no_action(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = TradingBot()
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
+        bot.run_market_cycle("US")
+        position = bot.traders["US"].portfolio.positions["AAPL"]
+        stop_loss = position["stop_loss"]
+        take_profit = position["take_profit"]
+
+        safe_price = (stop_loss + take_profit) / 2
+        safe_price_data = _make_ohlcv(np.array([safe_price, safe_price]), "AAPL")
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": safe_price_data})
+
+        actions = bot.check_stops_only("US")
+
+        assert actions == []
+        assert "AAPL" in bot.traders["US"].portfolio.positions
+
+    def test_price_below_stop_proposes_sell_when_not_auto_execute(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = TradingBot()
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
+        bot.run_market_cycle("US")
+        stop_loss = bot.traders["US"].portfolio.positions["AAPL"]["stop_loss"]
+
+        monkeypatch.setattr(settings, "auto_execute", False)
+        breach_data = _make_ohlcv(np.array([stop_loss * 0.9, stop_loss * 0.9]), "AAPL")
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": breach_data})
+
+        actions = bot.check_stops_only("US")
+
+        assert len(actions) == 1
+        assert actions[0]["action"] == "PROPOSED_SELL"
+        assert "AAPL" in bot.traders["US"].portfolio.positions
+
+    def test_price_below_stop_executes_sell_when_auto_execute(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = TradingBot()
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
+        bot.run_market_cycle("US")
+        stop_loss = bot.traders["US"].portfolio.positions["AAPL"]["stop_loss"]
+
+        breach_data = _make_ohlcv(np.array([stop_loss * 0.9, stop_loss * 0.9]), "AAPL")
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": breach_data})
+
+        actions = bot.check_stops_only("US")
+
+        assert len(actions) == 1
+        assert actions[0]["action"] == "EXECUTED"
+        assert "AAPL" not in bot.traders["US"].portfolio.positions
+
+    def test_never_opens_a_new_position(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = TradingBot()
+        assert bot.traders["US"].portfolio.positions == {}
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
+
+        actions = bot.check_stops_only("US")
+
+        assert actions == []
+        assert bot.traders["US"].portfolio.positions == {}
+
+    def test_state_shared_with_run_market_cycle_across_bot_instances(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = TradingBot()
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
+        bot.run_market_cycle("US")
+        stop_loss = bot.traders["US"].portfolio.positions["AAPL"]["stop_loss"]
+
+        breach_data = _make_ohlcv(np.array([stop_loss * 0.9, stop_loss * 0.9]), "AAPL")
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": breach_data})
+        bot.check_stops_only("US")
+        assert "AAPL" not in bot.traders["US"].portfolio.positions
+
+        bot2 = TradingBot()
+        assert "AAPL" not in bot2.traders["US"].portfolio.positions
+
+    def test_repeated_same_day_breach_does_not_double_sell(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = TradingBot()
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
+        bot.run_market_cycle("US")
+        stop_loss = bot.traders["US"].portfolio.positions["AAPL"]["stop_loss"]
+
+        breach_data = _make_ohlcv(np.array([stop_loss * 0.9, stop_loss * 0.9]), "AAPL")
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": breach_data})
+
+        first = bot.check_stops_only("US")
+        assert len(first) == 1
+        second = bot.check_stops_only("US")
+        assert second == []

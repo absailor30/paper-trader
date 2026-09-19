@@ -531,6 +531,42 @@ repeatedly throughout this project), so none of the above can be
 built/tested here. Handing off to continue with a tool that has real
 internet + Supabase access.
 
+## Stocks: intraday stop monitoring added (2026-09-19), unlike crypto's — no backtest behind it
+
+User asked directly: what happens if a stock crashes intraday between
+scheduled cycles? Answer at the time: nothing — `TradingBot` only checked
+exits once a day, at the scheduled cycle, using that day's close. Added
+the stock equivalent of crypto's intraday stop poller to close that gap:
+- `TradingBot.check_stops_only(market)` / `check_all_stops_only()` in
+  `orchestrator.py`, mirroring `CryptoTradingBot.check_stops_only()`
+  exactly — checks open positions' stop-loss/take-profit against the
+  current price via the shared `Strategy.check_stop_only()`, never opens
+  a new position, never runs the full indicator-based `should_exit()`.
+- `python run.py cycle --stops-only` (optionally `--market`).
+- `.github/workflows/stocks-intraday-stops.yml` — hourly, weekdays,
+  03:00-21:00 UTC (covers NSE + NYSE/Nasdaq market hours plus DST slop;
+  crypto's equivalent runs every 30min since it's 24/7).
+- 7 new tests in `tests/test_orchestrator.py::TestCheckStopsOnly`
+  mirroring crypto's test class. 85/85 tests total pass.
+
+**Important honesty gap, unlike crypto's version**: crypto's intraday
+stop poller was built *after* a real backtest showed it helped (5/8
+pairs improved, "Intraday stop monitoring — real-data result" above).
+**This stock version has no equivalent backtest** — it was built by
+directly mirroring the crypto code/pattern on request, not validated
+against real stock data first. It may well help (same logic, same
+rationale: a daily-close-only check can't react to an intraday plunge),
+but "we built the stop-loss mechanism" and "we proved it improves stock
+results" are different claims — only the first is true right now. Also
+worth flagging: `DataFetcher.fetch()` requests daily bars (`interval=1d`
+implicitly, no intraday interval param exists in `paper_trader/data/
+fetcher.py`) — whether Yahoo returns a live-updating "close" for today's
+still-open session (vs. yesterday's stale close) during market hours is
+Yahoo's own behavior, not something this code controls or has verified
+directly. Before trusting this to actually catch a crash in real time,
+that assumption needs checking against a live market-hours run, not just
+these synthetic-data tests.
+
 ## Other work this session
 
 - Sanity-checked the rotation trade log end-to-end against a synthetic

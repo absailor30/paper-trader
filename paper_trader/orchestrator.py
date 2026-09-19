@@ -160,6 +160,77 @@ class TradingBot:
         self._save(market)
         return actions
 
+    def check_stops_only(self, market: str) -> List[dict]:
+        """A lightweight, more-frequent companion to run_market_cycle() --
+        checks every open position's stop-loss/take-profit against the
+        CURRENT price via Strategy.check_stop_only(), and exits any that
+        are breached. Never opens a new position and never runs the full
+        (indicator-based) should_exit() -- that stays exclusively on
+        run_market_cycle()'s once-daily schedule, unchanged. Mirrors
+        CryptoTradingBot.check_stops_only() -- see that docstring and
+        CHECKPOINT.md for why this split exists.
+
+        Unlike crypto, this only matters during market hours -- a
+        separate GitHub Actions cron limits when this actually runs (see
+        stocks-intraday-stops.yml), this method itself has no time gate.
+
+        Uses the SAME per-market PaperTrader state and the SAME
+        AUTO_EXECUTE/propose-only gate as run_market_cycle() -- both act
+        on the latest saved state via self.traders[market].load(...) in
+        __init__, so the two jobs can't diverge on what's open even
+        running on independent schedules.
+        """
+        cfg = MARKETS[market]
+        trader = self.traders[market]
+        today = datetime.now().strftime("%Y-%m-%d")
+        actions: List[dict] = []
+
+        if not trader.portfolio.positions:
+            return actions
+
+        symbols = list(trader.portfolio.positions.keys())
+        data = self.fetcher.fetch_many(
+            symbols,
+            start_date=(datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d"),
+            india=cfg["india"],
+        )
+
+        for symbol, position in list(trader.portfolio.positions.items()):
+            df = data.get(symbol)
+            if df is None or df.empty:
+                continue
+            price = float(df["close"].iloc[-1])
+            pos_obj = Position(
+                symbol=symbol,
+                quantity=position["quantity"],
+                entry_price=position["entry_price"],
+                current_price=price,
+                entry_time=position["entry_time"],
+                strategy_name=position["strategy"],
+                stop_loss=position.get("stop_loss"),
+                take_profit=position.get("take_profit"),
+            )
+            if not self.strategy.check_stop_only(pos_obj, price):
+                continue
+
+            client_order_id = f"{symbol}:{self.strategy.name}:{today}:INTRADAY-SELL"
+            if settings.auto_execute:
+                order = trader.place_order(
+                    client_order_id, symbol, "SELL", position["quantity"], price,
+                    self.strategy.name, reasoning="check_stop_only triggered (intraday poll)",
+                )
+                actions.append({"action": "EXECUTED", **order})
+            else:
+                actions.append({"action": "PROPOSED_SELL", "symbol": symbol, "price": price, "quantity": position["quantity"]})
+                logger.info(f"[PROPOSE-ONLY] Would SELL (intraday stop) {position['quantity']} {symbol} @ {price:.2f}")
+
+        if actions:
+            self._save(market)
+        return actions
+
+    def check_all_stops_only(self) -> dict:
+        return {market: self.check_stops_only(market) for market in MARKETS}
+
     def _save(self, market: str):
         self.traders[market].save(f"{market.lower()}_portfolio")
 

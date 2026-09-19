@@ -3,6 +3,7 @@ CLI entry point.
 
     python run.py cycle          # run one US + India cycle (propose-only unless AUTO_EXECUTE=true)
     python run.py cycle --market US
+    python run.py cycle --stops-only   # check open positions' stop/take-profit against current price only
     python run.py backtest       # run the strategy backtest, all universes (see paper_trader/backtest/run_backtest.py)
     python run.py backtest --universe commodities
     python run.py backtest --universe crypto           # Binance spot pairs (see settings.crypto_pairs)
@@ -30,6 +31,16 @@ def main():
 
     cycle_parser = sub.add_parser("cycle")
     cycle_parser.add_argument("--market", choices=["US", "INDIA"], default=None)
+    cycle_parser.add_argument(
+        "--stops-only", action="store_true",
+        help=(
+            "Run only TradingBot.check_stops_only() instead of the full cycle -- checks "
+            "open positions' stop/take-profit against the current price and exits on a "
+            "breach, never opens a new position. Meant for a separate, more frequent "
+            "schedule than the once-daily full cycle, limited to market hours; see "
+            "stocks-intraday-stops.yml and CHECKPOINT.md 'Intraday stop monitoring'."
+        ),
+    )
 
     backtest_parser = sub.add_parser("backtest")
     backtest_parser.add_argument(
@@ -113,6 +124,15 @@ def main():
 
     logger.info(f"AUTO_EXECUTE={settings.auto_execute}")
     bot = TradingBot()
+
+    if args.stops_only:
+        if args.market:
+            actions = bot.check_stops_only(args.market)
+            print(json.dumps(actions, indent=2, default=str))
+        else:
+            results = bot.check_all_stops_only()
+            print(json.dumps(results, indent=2, default=str))
+        return
 
     if args.market:
         actions = bot.run_market_cycle(args.market)
