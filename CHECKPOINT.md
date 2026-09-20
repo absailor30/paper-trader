@@ -616,6 +616,45 @@ built-but-unproven one. Same caution as everywhere else in this
 checkpoint applies: one ~13-month window, not cross-validated across
 periods — revisit periodically, don't treat as settled forever.
 
+## Crypto Donchian sweep: Turtle config beats trend-filtered default
+
+The live crypto strategy (`CryptoTradingBot`) had been running
+`Donchian(entry=20, exit=10, trend_filter_period=100)` since the original
+crypto backtest, without a parameter sweep like the one already done for
+stocks. User asked why crypto had taken zero trades in 3 days — answer:
+expected, not a bug (Donchian is deliberately low-frequency, ~1
+trade/63 days/symbol per the original BTCUSDT run) — but prompted running
+`python run.py backtest --universe crypto --sweep donchian` for real.
+
+**Real-data result (2026-09-20)**, user's laptop, real Binance data,
+8 pairs, 2022-04-11 to 2026-09-20, 5 Donchian variants:
+
+| Variant | Validated | Avg win rate | Avg profit factor | Avg max DD | Trades |
+|---|---|---|---|---|---|
+| Donchian_20_10_baseline | 3/8 | 40.2% | 1.44 | -9.36% | 231 |
+| **Donchian_55_20_turtle** | **5/8** | **45.8%** | **1.76** | **-8.10%** | 122 |
+| Donchian_10_5_fast | 3/8 | 37.2% | 1.26 | -9.51% | 366 |
+| Donchian_20_10_trend100 (previous live default) | 4/8 | 44.6% | 1.53 | -8.07% | 184 |
+| Donchian_55_20_trend100 | 4/8 | 44.8% | 1.73 | -8.36% | 120 |
+
+`Donchian_55_20_turtle` (classic 55-day entry / 20-day exit, no trend
+filter) wins on validated-symbol count and profit factor, with comparable
+drawdown, despite trading a third as often as the fastest variant, which
+was actually the worst performer. This contradicts stocks, where
+20/10+trend100 was the winner — crypto and equities don't share an
+optimal Donchian config.
+
+**Decision**: switched `CryptoTradingBot.__init__` (`crypto_orchestrator.py`)
+from `Donchian(trend_filter_period=100)` (entry/exit defaulting to 20/10)
+to `Donchian(entry_period=55, exit_period=20, trend_filter_period=None)`.
+89/89 tests still pass unchanged. Same caveat as every other result here:
+one sweep window, not cross-validated — revisit if live results diverge.
+
+Also fixed a real bug found in the same pass: `TATAMOTORS.NS` in
+`settings.india_stocks` was 404ing every cycle (Tata Motors demerged
+Oct 2025 into `TMPV`/passenger vehicles and `TMCV`/commercial vehicles on
+NSE). Replaced with `TMPV` as the closer match to the original position.
+
 ## Other work this session
 
 - Sanity-checked the rotation trade log end-to-end against a synthetic
