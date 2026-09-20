@@ -593,11 +593,28 @@ as everything else that needs real internet:
   verified both now run correctly up to the network call (blocked only
   by this sandbox's policy, confirmed by running them here).
 
-**Still not done**: neither script has been run against real data yet —
-that needs an environment with real internet (same handoff as every
-other real-data step in this project). Until that real run happens and
-gets recorded here, the stock intraday-stop poller remains an unvalidated
-mechanism, not a proven improvement, exactly as flagged above.
+**Real-data result (2026-09-20)**, run on the user's laptop, 38 symbols
+(US + India combined, `TATAMOTORS.NS` skipped — delisted, matches the
+known gap from the equity scoreboard), 1h intraday bars, ~13 months
+(2025-08 to 2026-09), `Donchian(trend_filter_period=100)`:
+
+**28/38 symbols improved, 8 worsened, 2 flat (no stop fired: HINDUNILVR,
+BHARTIARTL). Average delta: +0.47%.** Biggest single-symbol wins: ITC
++3.42%, UNH +3.35%; biggest loss: GOOGL -0.61%. Unlike crypto's result,
+no outlier pair dominates the average here — the 38-symbol sample size
+dilutes any single win/loss much more than crypto's 8 pairs did, so
+"intraday stops help on average" is a more broad-based signal for stocks
+than it was for crypto. Same pattern as crypto held again: most symbols
+saw MORE trades with intraday stops (faster exits, sometimes re-entering
+same day) and win rate moved in either direction per-symbol, not
+uniformly up.
+
+**Decision**: net positive and broader-based than the crypto result —
+the stock intraday-stop poller (already live via
+`stocks-intraday-stops.yml`) is now a validated mechanism, not just a
+built-but-unproven one. Same caution as everywhere else in this
+checkpoint applies: one ~13-month window, not cross-validated across
+periods — revisit periodically, don't treat as settled forever.
 
 ## Other work this session
 
