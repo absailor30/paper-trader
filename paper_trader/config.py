@@ -44,7 +44,9 @@ class Settings(BaseSettings):
         "HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK",      # financials
         "HINDUNILVR", "ITC",                              # consumer staples
         "BHARTIARTL", "LT",                                # telecom/industrials
-        "MARUTI", "TATAMOTORS",                            # auto
+        "MARUTI", "TMPV",                                  # auto (TATAMOTORS demerged Oct 2025 into
+                                                            # TMPV/passenger vehicles + TMCV/commercial;
+                                                            # TMPV kept as the closer match to the original)
         "SUNPHARMA",                                       # pharma
     ]
 
