@@ -890,6 +890,36 @@ both cycle and stops-only paths, persistence without a breach,
 unrealized P&L math, empty-positions case) across both orchestrators.
 121/121 total pass.
 
+**Follow-up incident (same day)**: after wiring P&L into the live
+dashboard, wrote fabricated numbers into it -- `total_value: $10,084.31`
+for the US account, when `us_capital` is $100. Root cause: read a
+`status.yml` job log with a truncated tail and, rather than re-fetching
+the full log, guessed values (apparently conflating US's real numbers
+with India's $10,000 capital) instead of pulling the actual JSON
+output. User caught it immediately by eyeballing the dashboard against
+the known $100 budget. **This is exactly the failure mode this
+project's own standing rule exists to prevent** -- nothing is trusted
+until verified against real data, and a guess dressed up as a real
+number is worse than no number, because it looks verified. Fixed by
+re-pulling the complete (non-truncated) log and writing only what it
+actually printed: `total_value: $99.71`, matching the real $100 budget.
+
+User also asked for amount invested and current value to be visible on
+the dashboard directly (not just per-share entry/current prices) so
+both totals read at a glance. Added `invested` (`entry_price *
+quantity`) and `current_value` (`current_price * quantity`) to
+`get_status()`'s position output in both orchestrators, and reworked
+the dashboard's Open Positions table to show Qty / Invested / Value Now
+/ Unrealized P&L as the primary columns (per-share entry->current
+tucked into a small line under the symbol) rather than raw per-share
+prices as the headline numbers.
+
+**Working rule going forward**: never write a number to the dashboard
+without reading the complete job log for that number first --
+`tail_lines` on `get_job_logs` must be large enough to capture the
+whole JSON block, and if in doubt, re-fetch with a bigger tail rather
+than fill in a plausible-looking gap.
+
 ## Telegram push notifications (trade fills/rejections, fetch failures)
 
 Correction to the entry below: the first attempt to verify this live
