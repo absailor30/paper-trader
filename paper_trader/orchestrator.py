@@ -211,9 +211,13 @@ class TradingBot:
         never retries within the same day by design (client_order_id embeds
         today's date, and place_order's dedup returns the cached rejection
         rather than re-executing). This uses a distinct client_order_id
-        (suffixed :RETRY) so it books as a new attempt without touching or
-        replacing that original rejected record in trade history -- both
-        stay visible.
+        per call (suffixed :RETRY1, :RETRY2, ...) so each attempt books as
+        a new one without touching or replacing any earlier rejected
+        record in trade history -- all stay visible. A fixed :RETRY
+        suffix would just collide with itself on a second same-day retry
+        (hit for real: a retry that was itself rejected got replayed
+        verbatim on the next attempt, even after the underlying bug was
+        fixed).
 
         Only re-attempts a genuine outstanding signal: still fetches fresh
         data and re-checks generate_signal(), so this can't be used to
@@ -244,7 +248,11 @@ class TradingBot:
         if qty <= 0:
             return {"action": "SKIPPED", "reason": "position size is 0"}
 
-        client_order_id = f"{symbol}:{self.strategy.name}:{today}:BUY:RETRY"
+        base = f"{symbol}:{self.strategy.name}:{today}:BUY"
+        attempt = 1
+        while f"{base}:RETRY{attempt}" in trader._order_results:
+            attempt += 1
+        client_order_id = f"{base}:RETRY{attempt}"
         if settings.auto_execute:
             order = trader.place_order(
                 client_order_id, symbol, "BUY", qty, signal.price, self.strategy.name,

@@ -312,8 +312,29 @@ class TestRetryEntry:
         result = bot.retry_entry("US", "AAPL")
 
         assert result["action"] == "EXECUTED"
-        assert result["client_order_id"].endswith(":RETRY")
+        assert result["client_order_id"].endswith(":RETRY1")
         assert "AAPL" in bot.traders["US"].portfolio.positions
+
+    def test_second_same_day_retry_uses_a_new_id_not_the_first_retrys_cache(self, monkeypatch):
+        """Real production bug: a fixed :RETRY suffix meant a second retry
+        today just replayed the first retry's own cached (rejected)
+        result verbatim, even after the underlying bug was fixed."""
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = TradingBot()
+        trader = bot.traders["US"]
+        today = datetime.now().strftime("%Y-%m-%d")
+        first_retry_id = f"AAPL:{bot.strategy.name}:{today}:BUY:RETRY1"
+        # Simulate a first retry that was itself rejected (e.g. before a
+        # follow-up bug fix landed).
+        trader.place_order(first_retry_id, "AAPL", "BUY", 999_999.0, 100.0, bot.strategy.name)
+        assert trader._order_results[first_retry_id]["status"] == "REJECTED"
+
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
+        result = bot.retry_entry("US", "AAPL")
+
+        assert result["client_order_id"] == f"AAPL:{bot.strategy.name}:{today}:BUY:RETRY2"
+        assert result["action"] == "EXECUTED"
+        assert trader._order_results[first_retry_id]["status"] == "REJECTED"  # untouched
 
     def test_does_not_touch_the_original_rejected_order(self, monkeypatch):
         monkeypatch.setattr(settings, "auto_execute", True)

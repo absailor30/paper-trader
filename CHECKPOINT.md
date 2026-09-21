@@ -801,6 +801,20 @@ quantity's real cost never exceeds `allocated`. 1 new regression test
 reproduces the exact second failure (price=$736.4401245117188,
 cash=$49.90) and asserts it now fills. 105/105 total pass.
 
+**Fifth follow-up (same day)**: re-triggered the retry for QQQ against
+the floor fix and it STILL came back rejected with the *first* retry's
+cached result verbatim (same timestamp, same numbers) -- `retry_entry`'s
+`client_order_id` used a fixed `:RETRY` suffix, so a second same-day
+retry collided with the first retry's own cached rejection, one level
+down in the exact same idempotency trap the whole feature exists to work
+around.
+
+**Fix**: `client_order_id` now increments per attempt (`:RETRY1`,
+`:RETRY2`, ...), checked against `trader._order_results` so each retry
+gets a fresh ID and no earlier attempt's record is ever touched or
+replaced. 1 new regression test reproduces a first-retry-rejected /
+second-retry-should-succeed sequence. 106/106 total pass.
+
 Today's actual "why no trades" answer for the rest of the universe:
 no other US/India symbol made a new 20-day Donchian high above its
 100-day trend filter today — that part is a real no-signal day, not a
