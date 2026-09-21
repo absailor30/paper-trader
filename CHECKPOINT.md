@@ -655,6 +655,76 @@ Also fixed a real bug found in the same pass: `TATAMOTORS.NS` in
 Oct 2025 into `TMPV`/passenger vehicles and `TMCV`/commercial vehicles on
 NSE). Replaced with `TMPV` as the closer match to the original position.
 
+## Next: crypto strategy candidates to backtest (not yet run — start here in a fresh session)
+
+User asked to look at other crypto strategies and record candidates so
+a new chat can run the backtests directly, rather than re-deriving this
+from scratch. What's below is a prioritized list, not a decision —
+nothing here is validated until it's run against real data and this
+file is updated with the real result, same rule as everywhere else in
+this checkpoint.
+
+**Already tried on crypto (8 pairs, spot, 2022-04 to 2026-09) — don't
+re-run these blind, extend or sweep them instead:**
+- Donchian Breakout — **the only validated one**, currently deployed as
+  `Donchian_55_20_turtle` (55/20, no trend filter). See "Crypto Donchian
+  sweep" above for the 5-variant sweep this came from.
+- Trend Following (SMA 50/200) — weak (1/8 validated, PF 0.72), whipsaws
+  badly in crypto's 24/7 no-overnight-gap market.
+- Mean Reversion (RSI oversold-recovery) — weak (2/8 validated, PF 0.89).
+- Momentum Rotation — **never run on crypto**, only US/India equities
+  (where it's the one strategy with a confirmed, twice-verified edge:
+  +149.56% vs +119.32% benchmark on US). `run_rotation_backtest.py`
+  currently only wires `us`/`india` universes to `DataFetcher` — extending
+  it to a `crypto` universe on `BinanceFetcher`/`settings.crypto_pairs` is
+  the natural next test given the code already exists and already has a
+  real edge elsewhere. **Highest-priority candidate** on effort-to-signal
+  ratio alone.
+
+**Not yet built, ranked by build effort (real data untested, don't
+assume any of these work before running them):**
+1. **Momentum Rotation on crypto** (extend existing code, no new
+   strategy logic) — wire `run_rotation_backtest.py` to accept
+   `--universe crypto` via `BinanceFetcher`, same `build_price_matrix`
+   pattern already used for US/India.
+2. **MACD / dual-moving-average crossover** (new strategy class,
+   `paper_trader/strategy/indicators.py` already has the building
+   blocks for an EMA-based MACD) — a different trend-following signal
+   family than Donchian's channel breakout; worth comparing since
+   Donchian's SMA-based trend filter already lost to the no-filter
+   variant in the sweep above — a differently-shaped trend signal
+   might behave differently.
+3. **Bollinger Band breakout/mean-reversion** (new indicator + strategy)
+   — volatility-band version of the same breakout/reversion families
+   already tested with fixed-period channels (Donchian) and RSI.
+4. **Keltner Channel / ATR-band breakout** — same shape as Donchian but
+   volatility-scaled bands instead of a fixed N-day high/low; a natural
+   variant to sweep against the Turtle config's win.
+5. **Funding-rate carry / cash-and-carry basis trade** (crypto-native,
+   explicitly flagged as unbuilt in the "Crypto (Binance) real-data run"
+   entry above) — needs Binance futures funding-rate history (a new
+   data source, `BinanceFetcher` doesn't pull this yet) and a spot+futures
+   paired position model, not just a single-instrument signal. Highest
+   build effort here, but it's the one genuinely crypto-native edge on
+   this list (funding rates trend positive in bull markets, giving a
+   real economic reason for an edge, unlike price-action strategies
+   borrowed wholesale from equities) — worth doing once the simpler
+   candidates above are exhausted.
+
+**Practical note for the next session (confirmed, not speculative)**:
+tested `BinanceFetcher().fetch("BTCUSDT", ...)` directly in this sandbox
+after the `data-api.binance.vision` fallback fix — still fails, but for
+a different reason than GitHub Actions' 451: this sandbox's own egress
+proxy returns `403 Forbidden` at the CONNECT/tunnel level for BOTH
+`api.binance.com` and `data-api.binance.vision`, before either host is
+ever reached. The fallback fix only helps where Binance itself is the
+blocker (GitHub Actions runners); it does nothing for a sandbox whose
+network policy blocks the hosts outright. **Real crypto backtests still
+need to run from the user's own machine (real internet access) or
+triggered via GitHub Actions** (`python run.py backtest --universe
+crypto` won't return real data from inside a sandbox session like this
+one) — don't re-attempt this in-sandbox expecting a different result.
+
 ## Crypto fetches 451 from GitHub Actions runners (real bug, fixed)
 
 User asked how to check whether trades were actually taken today. Pulled
