@@ -278,6 +278,25 @@ class TestPositionSizing:
         )
         assert order["status"] == "FILLED"
 
+    def test_rounding_never_produces_a_quantity_costing_more_than_allocated(self, monkeypatch):
+        """Real production bug, round 2 (2026-09-21): the slippage/commission
+        headroom fix above still got rejected for a DIFFERENT QQQ price
+        ("need $49.93, have $49.90") because round(shares, 4) can round UP
+        (0.067657 -> 0.0677), producing a quantity whose real fill cost
+        exceeds what it was sized against. Must floor, not round."""
+        monkeypatch.setitem(orchestrator.MARKETS, "US", {"symbols": ["QQQ"], "capital": 100.0, "india": False})
+        bot = TradingBot()
+        trader = bot.traders["US"]
+        trader.portfolio.capital = 49.90
+
+        qty = bot._position_size(trader, price=736.4401245117188)
+        assert qty > 0
+
+        order = trader.place_order(
+            "QQQ:test:2026-09-21:BUY:RETRY", "QQQ", "BUY", qty, 736.4401245117188, "test",
+        )
+        assert order["status"] == "FILLED"
+
 
 class TestRetryEntry:
     """retry_entry() lets a REJECTED same-day BUY (e.g. one rejected by a

@@ -26,6 +26,16 @@ MARKETS = {
 }
 
 
+def _floor4(shares: float) -> float:
+    # Truncate to 4 decimal places rather than round() -- round() can
+    # round UP (e.g. 0.067657 -> 0.0677), producing a quantity whose real
+    # fill cost (price*(1+slippage) + commission) exceeds the budget it
+    # was sized against. Seen for real: QQQ sized/rounded to 0.0677
+    # needed $49.93 against $49.90 available. Flooring guarantees the
+    # sized quantity never costs more than `allocated`.
+    return math.floor(shares * 10_000) / 10_000
+
+
 class TradingBot:
     def __init__(self):
         self.fetcher = DataFetcher()
@@ -82,7 +92,7 @@ class TradingBot:
 
         shares = allocated / effective_price
         if shares >= 1 or portfolio_value < 1:
-            return math.floor(shares) if india else round(shares, 4)
+            return math.floor(shares) if india else _floor4(shares)
 
         # Target allocation alone can't afford even 1 share (e.g. a $500+
         # stock against a small account's 12% target). For the US, where
@@ -105,8 +115,9 @@ class TradingBot:
             logger.warning(f"Position skipped: price {price} exceeds available cash for even 1 whole share (India)")
             return 0.0
 
-        if ceiling_shares > 0:
-            return round(ceiling_shares, 4)
+        floored = _floor4(ceiling_shares)
+        if floored > 0:
+            return floored
 
         logger.warning(f"Position skipped: price {price} exceeds available cash")
         return 0.0

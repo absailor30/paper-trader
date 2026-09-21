@@ -784,6 +784,23 @@ tests (distinct order id, original rejection untouched, skip when
 already open, skip when no signal, propose-only respected). 104/104
 total pass.
 
+**Fourth follow-up (same day)**: used the new `retry_entry` path live
+against QQQ -- still REJECTED, but the gap shrank from $0.10 to $0.03
+("need 49.93, have 49.90"). Root cause: `round(shares, 4)` can round
+**up** (0.067657 -> 0.0677), producing a quantity whose real fill cost
+exceeds the budget it was sized against -- the slippage/commission
+headroom fix computed the right budget, but the 4-decimal rounding step
+could still push the final quantity over it. Same "must floor, not
+round, at a capital boundary" lesson as the original rotation-backtest
+fix, just resurfacing one step further down in this new code path.
+
+**Fix**: added a `_floor4()` helper (`math.floor(shares * 10_000) /
+10_000`) and replaced both `round(shares, 4)` call sites in
+`_position_size()`'s US/fractional paths with it -- guarantees the sized
+quantity's real cost never exceeds `allocated`. 1 new regression test
+reproduces the exact second failure (price=$736.4401245117188,
+cash=$49.90) and asserts it now fills. 105/105 total pass.
+
 Today's actual "why no trades" answer for the rest of the universe:
 no other US/India symbol made a new 20-day Donchian high above its
 100-day trend filter today — that part is a real no-signal day, not a
