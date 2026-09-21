@@ -4,6 +4,38 @@
 **Branch**: `rebuild/v2` (not merged to `main` — `main` still has the previous
 architecture live on Render, untouched by this branch)
 
+## START HERE if you're a new session picking this up (2026-09-21 handoff)
+
+Task for this session: **backtest new crypto strategy candidates against
+real data** — jump straight to "Next: crypto strategy candidates to
+backtest" further down this file for the full prioritized list and
+context. Short version:
+
+1. Read "Next: crypto strategy candidates to backtest" in full before
+   doing anything — it has the ranked candidate list, what's already
+   been tried and ruled out for crypto, and exact effort estimates.
+2. **Start with Momentum Rotation on crypto** — highest effort-to-signal
+   ratio. The code already exists (`paper_trader/backtest/rotation_backtest.py`,
+   `run_rotation_backtest.py`) and already has a proven edge on US
+   equities (+149.56% vs +119.32% benchmark); it's just never been
+   pointed at `settings.crypto_pairs` via `BinanceFetcher`. Extend
+   `run_rotation_backtest.py`'s `--universe` option to accept `crypto`,
+   mirroring the pattern `run_backtest.py` already uses.
+3. **You cannot get real crypto data from inside a sandboxed session** —
+   confirmed by direct test, not assumed: this sandbox's own egress
+   proxy 403s both `api.binance.com` and `data-api.binance.vision`
+   outright. Real backtests need to run either on the user's own laptop
+   (ask them to run the command and paste back the output) or triggered
+   via GitHub Actions and read back through job logs — same pattern
+   used throughout this whole checkpoint. Do not report a "result" from
+   data you couldn't actually verify came from a live run.
+4. Every real result — win or lose, validated or not — gets a new dated
+   entry in this file with the actual numbers, same format as every
+   other entry here. Don't just narrate results in chat.
+5. Nothing gets promoted to the live `CryptoTradingBot` strategy without
+   an explicit ask and a real-data result backing it, same rule as every
+   strategy swap so far in this project.
+
 ## Why this rebuild happened
 
 An audit on 2026-09-15 found the previous system's core data module
