@@ -440,6 +440,7 @@ class TestMarkToMarketAndStatus:
         assert pos["unrealized_pnl"] == pytest.approx(position["entry_price"] * position["quantity"])
         assert pos["unrealized_pnl_pct"] == pytest.approx(100.0)
         assert pos["invested"] == pytest.approx(position["entry_price"] * position["quantity"])
+        assert pos["current_value"] == pytest.approx(position["current_price"] * position["quantity"])
 
     def test_get_status_with_no_positions(self):
         bot = TradingBot()

@@ -374,6 +374,7 @@ class TradingBot:
                 "entry_price": p["entry_price"],
                 "current_price": p["current_price"],
                 "invested": p["entry_price"] * p["quantity"],
+                "current_value": p["current_price"] * p["quantity"],
                 "unrealized_pnl": unrealized_pnl,
                 "unrealized_pnl_pct": unrealized_pnl_pct,
                 "stop_loss": p.get("stop_loss"),
