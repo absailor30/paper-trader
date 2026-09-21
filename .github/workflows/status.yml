@@ -1,21 +1,38 @@
 name: Portfolio status
 
-# On-demand P&L check: refreshes every open position to its latest price
-# (via check_stops_only()/check_all_stops_only(), so a real stop can
-# still fire -- same AUTO_EXECUTE gate as every other job here, not a
-# separate read-only path) and prints total_value/total_return_pct plus
-# per-position unrealized P&L for US, INDIA and CRYPTO. Manual-only: no
-# schedule, since P&L doesn't need checking on a fixed cadence the way a
-# new-entry cycle does -- trigger it whenever a fresh number is needed
-# (e.g. to refresh the live dashboard).
+# Refreshes every open position to its latest price (via
+# check_stops_only()/check_all_stops_only(), so a real stop can still
+# fire -- same AUTO_EXECUTE gate as every other job here) and publishes
+# total_value/total_return_pct plus per-position unrealized P&L for US,
+# INDIA and CRYPTO as a static page on GitHub Pages.
+#
+# Runs on GitHub's own schedule -- no Claude session involved once this
+# is set up, unlike the earlier claude.ai-Artifact dashboard, which
+# needed a live Claude session to relay data and kept losing its
+# refresh schedule whenever that session restarted.
 
 on:
+  schedule:
+    - cron: "6,23,40,57 3-21 * * *"  # market hours (NSE+NYSE), ~every 17 min
+    - cron: "44 22,1 * * *"          # off-hours, crypto still trades 24/7
   workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   status:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,10 +43,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Refresh and print portfolio status
+      - name: Refresh portfolio status and render page
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           AUTO_EXECUTE: ${{ vars.AUTO_EXECUTE || 'false' }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python run.py status
+        run: python run.py status | python scripts/render_status_page.py
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - uses: actions/deploy-pages@v4
+        id: deployment
