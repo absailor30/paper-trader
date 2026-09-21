@@ -655,6 +655,47 @@ Also fixed a real bug found in the same pass: `TATAMOTORS.NS` in
 Oct 2025 into `TMPV`/passenger vehicles and `TMCV`/commercial vehicles on
 NSE). Replaced with `TMPV` as the closer match to the original position.
 
+## Crypto fetches 451 from GitHub Actions runners (real bug, fixed)
+
+User asked how to check whether trades were actually taken today. Pulled
+the last 2 days of `crypto-cycle.yml` job logs directly (not just
+assuming "success" meant it worked) and found every single run — both
+`success`-labeled — was fetching **zero data**: Binance returns `451
+Client Error` on `api.binance.com` for all 8 pairs, same geo-block this
+sandbox hits. The job logs `[]` and exits 0, so the workflow's green
+checkmark was hiding a total no-op. This is not a signal/strategy issue
+at all — nothing has ever been fetched in production, so nothing has
+ever traded, independent of which Donchian config is deployed.
+
+Root cause: GitHub Actions runners egress from datacenter IP ranges
+Binance blocks the same way as this sandbox (`api.binance.com` enforces
+regional restrictions on its trading API).
+
+**Fix**: Binance runs `data-api.binance.vision`, a public read-only
+market-data mirror specifically for geo-blocked callers, covering
+`GET /api/v3/klines` (confirmed via Binance's own API docs and the
+`binance-public-data` project — not just assumed). `BinanceFetcher.fetch()`
+now tries `api.binance.com` first, and on any failure retries once against
+`data-api.binance.vision` before giving up, for the `spot` market. No
+fallback exists for `futures` klines — that market still fails hard on a
+block, same as before (crypto strategies only use spot in production, so
+this doesn't block anything currently live).
+
+**Not yet verified against a real GitHub Actions run** — this sandbox's
+own proxy also blocks both `api.binance.com` and `data-api.binance.vision`
+outbound, so the fallback path is only covered by mocked-session unit
+tests (2 new: fallback succeeds after primary 451s; futures has no
+fallback and still fails clean). Per this project's standing rule, this
+is NOT considered validated until the next real `crypto-cycle.yml` run
+actually pulls data — check that run's logs for `"fetched via fallback
+host"` before trusting this fix worked.
+
+Also confirmed via the same log check: `stocks-cycle.yml` has never run
+yet (zero runs total) — not a bug, it's scheduled for 21:30 UTC weekdays
+and was only added Sept 19 (Saturday), so today (Mon) is its first
+scheduled fire. Whether yfinance is reachable from Actions runners is
+unverified — check its first real run's logs too.
+
 ## Other work this session
 
 - Sanity-checked the rotation trade log end-to-end against a synthetic
