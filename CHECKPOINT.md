@@ -821,6 +821,42 @@ no other US/India symbol made a new 20-day Donchian high above its
 bug (Donchian is inherently low-frequency; see the crypto sweep result
 above for how infrequent this family of strategy trades).
 
+## Telegram push notifications (trade fills/rejections, fetch failures)
+
+User asked for a Telegram bot; scoped it down to push-notifications-only
+(no incoming-command handling, since that needs a continuously running
+process GitHub Actions can't provide -- a webhook/polling bot would need
+real hosting, out of scope for now unless asked).
+
+`paper_trader/notify.py`: `send_telegram_message(text)` posts to the
+Telegram Bot API, silently no-ops when `telegram_bot_token`/
+`telegram_chat_id` (new `Settings` fields, both default `""`) aren't
+configured -- no Telegram credentials needed for local dev or any test.
+`notify_order(market, order)` sends a message for every FILLED/REJECTED
+order; `notify_fetch_failure(market, requested, received)` sends a
+warning when a fetch cycle returns data for zero symbols -- the exact
+failure mode (crypto's api.binance.com 451, silently, for 3+ days) that
+went unnoticed until job logs were checked by hand earlier this session.
+
+Wired into every real order-placement call site (`orchestrator.py`'s
+`run_market_cycle`, `retry_entry`, `check_stops_only`;
+`crypto_orchestrator.py`'s `run_cycle`, `check_stops_only`) and every
+fetch call in both orchestrators. All 4 GitHub Actions workflows
+(`crypto-cycle.yml`, `crypto-intraday-stops.yml`, `stocks-cycle.yml`,
+`stocks-intraday-stops.yml`) pass `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`
+through from repo secrets, same pattern as `DATABASE_URL`. `requests`
+added as an explicit dependency (was only a transitive one via
+yfinance, used directly by both `binance_fetcher.py` and now
+`notify.py`). 8 new tests, all mocked -- no real Telegram calls in the
+test suite. 114/114 total pass.
+
+**Not yet live**: needs `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` added as
+GitHub Actions repo secrets before any message actually sends (create a
+bot via @BotFather, message it once, get the chat id from
+`api.telegram.org/bot<token>/getUpdates`). Until those secrets exist,
+every call above silently no-ops -- confirmed safe by design, not yet
+confirmed working against a real Telegram chat.
+
 ## Other work this session
 
 - Sanity-checked the rotation trade log end-to-end against a synthetic

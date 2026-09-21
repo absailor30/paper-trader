@@ -24,6 +24,7 @@ from loguru import logger
 from paper_trader.config import settings
 from paper_trader.data.binance_fetcher import BinanceFetcher
 from paper_trader.execution.paper_trader import PaperTrader
+from paper_trader.notify import notify_fetch_failure, notify_order
 from paper_trader.strategy.base import Position
 from paper_trader.strategy.donchian_breakout import DonchianBreakoutStrategy
 
@@ -77,6 +78,7 @@ class CryptoTradingBot:
 
         start_date = (datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d")
         data = self.fetcher.fetch_many(settings.crypto_pairs, start_date=start_date)
+        notify_fetch_failure("CRYPTO", len(settings.crypto_pairs), len(data))
 
         # 1. Exits on open positions
         for symbol, position in list(self.trader.portfolio.positions.items()):
@@ -101,6 +103,7 @@ class CryptoTradingBot:
                         client_order_id, symbol, "SELL", position["quantity"], price,
                         self.strategy.name, reasoning="should_exit triggered",
                     )
+                    notify_order("CRYPTO", order)
                     actions.append({"action": "EXECUTED", **order})
                 else:
                     actions.append({"action": "PROPOSED_SELL", "symbol": symbol, "price": price, "quantity": position["quantity"]})
@@ -131,6 +134,7 @@ class CryptoTradingBot:
                     client_order_id, symbol, "BUY", qty, signal.price, self.strategy.name,
                     stop_loss=signal.stop_loss, take_profit=signal.take_profit, reasoning=signal.reasoning,
                 )
+                notify_order("CRYPTO", order)
                 actions.append({"action": "EXECUTED", **order})
             else:
                 actions.append({
@@ -207,6 +211,7 @@ class CryptoTradingBot:
                     client_order_id, symbol, "SELL", position["quantity"], price,
                     self.strategy.name, reasoning="check_stop_only triggered (intraday poll)",
                 )
+                notify_order("CRYPTO", order)
                 actions.append({"action": "EXECUTED", **order})
             else:
                 actions.append({"action": "PROPOSED_SELL", "symbol": symbol, "price": price, "quantity": position["quantity"]})

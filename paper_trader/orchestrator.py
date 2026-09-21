@@ -17,6 +17,7 @@ from loguru import logger
 from paper_trader.config import settings
 from paper_trader.data.fetcher import DataFetcher
 from paper_trader.execution.paper_trader import PaperTrader
+from paper_trader.notify import notify_fetch_failure, notify_order
 from paper_trader.strategy.base import Position
 from paper_trader.strategy.donchian_breakout import DonchianBreakoutStrategy
 
@@ -139,6 +140,7 @@ class TradingBot:
             start_date=(datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d"),
             india=cfg["india"],
         )
+        notify_fetch_failure(market, len(cfg["symbols"]), len(data))
 
         # 1. Exits on open positions
         for symbol, position in list(trader.portfolio.positions.items()):
@@ -163,6 +165,7 @@ class TradingBot:
                         client_order_id, symbol, "SELL", position["quantity"], price,
                         self.strategy.name, reasoning="should_exit triggered",
                     )
+                    notify_order(market, order)
                     actions.append({"action": "EXECUTED", **order})
                 else:
                     actions.append({"action": "PROPOSED_SELL", "symbol": symbol, "price": price, "quantity": position["quantity"]})
@@ -193,6 +196,7 @@ class TradingBot:
                     client_order_id, symbol, "BUY", qty, signal.price, self.strategy.name,
                     stop_loss=signal.stop_loss, take_profit=signal.take_profit, reasoning=signal.reasoning,
                 )
+                notify_order(market, order)
                 actions.append({"action": "EXECUTED", **order})
             else:
                 actions.append({
@@ -258,6 +262,7 @@ class TradingBot:
                 client_order_id, symbol, "BUY", qty, signal.price, self.strategy.name,
                 stop_loss=signal.stop_loss, take_profit=signal.take_profit, reasoning=signal.reasoning,
             )
+            notify_order(market, order)
             result = {"action": "EXECUTED", **order}
         else:
             result = {
@@ -328,6 +333,7 @@ class TradingBot:
                     client_order_id, symbol, "SELL", position["quantity"], price,
                     self.strategy.name, reasoning="check_stop_only triggered (intraday poll)",
                 )
+                notify_order(market, order)
                 actions.append({"action": "EXECUTED", **order})
             else:
                 actions.append({"action": "PROPOSED_SELL", "symbol": symbol, "price": price, "quantity": position["quantity"]})

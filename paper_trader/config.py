@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     # Market data
     gemini_api_key: str = ""
 
+    # Telegram push notifications (trade fills/rejections, fetch
+    # failures). Both empty = notifications silently disabled; no
+    # Telegram credentials are ever needed for local dev or tests.
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+
     # Capital
     us_capital: float = 100.0
     india_capital: float = 10000.0
