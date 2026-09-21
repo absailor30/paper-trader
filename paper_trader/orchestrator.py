@@ -8,6 +8,7 @@ no order is placed, unless settings.auto_execute is explicitly true. Flip
 that only after paper_trader/backtest/run_backtest.py has shown positive
 expectancy for the strategy against real data.
 """
+import math
 from datetime import datetime, timedelta
 from typing import List
 
@@ -55,7 +56,12 @@ class TradingBot:
             return False
         return True
 
-    def _position_size(self, trader: PaperTrader, price: float) -> float:
+    def _position_size(self, trader: PaperTrader, price: float, india: bool = False) -> float:
+        # NSE/BSE brokers only fill whole shares -- no fractional trading
+        # in India, unlike US brokers (Alpaca, Schwab, etc.) which do.
+        # This is a real, permanent market-structure difference, not a
+        # config knob: `india` forces every quantity below to a whole
+        # number for that market, while US sizing stays fractional.
         if price <= 0:
             return 0.0
 
@@ -66,19 +72,29 @@ class TradingBot:
 
         shares = allocated / price
         if shares >= 1 or portfolio_value < 1:
-            return round(shares, 4)  # fractional sizing; live order routing enforces integer shares for India separately
+            return math.floor(shares) if india else round(shares, 4)
 
         # Target allocation alone can't afford even 1 share (e.g. a $500+
-        # stock against a small account's 12% target). Since fractional
-        # shares are supported end-to-end -- place_order takes qty as-is,
-        # no int rounding -- size up to the hard concentration ceiling
-        # instead of forcing a whole share: requiring a full share here
-        # would spend far more than the target risk budget, or (as found
-        # from a real production run where a real signal was silently
-        # dropped) skip a real signal outright even though the account
-        # could easily afford a fractional position.
+        # stock against a small account's 12% target). For the US, where
+        # fractional shares are supported end-to-end (place_order takes
+        # qty as-is, no int rounding), size up to the hard concentration
+        # ceiling instead of forcing a whole share: requiring a full share
+        # here would spend far more than the target risk budget, or (as
+        # found from a real production run where a real signal was
+        # silently dropped) skip a real signal outright even though the
+        # account could easily afford a fractional position. For India,
+        # a whole share below the ceiling is the best this account can
+        # do -- there is no smaller unit to fall back to.
         ceiling_allocated = min(portfolio_value * settings.concentration_ceiling, available_cash)
         ceiling_shares = ceiling_allocated / price
+
+        if india:
+            whole_shares = math.floor(ceiling_shares)
+            if whole_shares >= 1:
+                return float(whole_shares)
+            logger.warning(f"Position skipped: price {price} exceeds available cash for even 1 whole share (India)")
+            return 0.0
+
         if ceiling_shares > 0:
             return round(ceiling_shares, 4)
 
@@ -146,7 +162,7 @@ class TradingBot:
             if signal is None:
                 continue
 
-            qty = self._position_size(trader, signal.price)
+            qty = self._position_size(trader, signal.price, india=cfg["india"])
             if qty <= 0:
                 continue
 

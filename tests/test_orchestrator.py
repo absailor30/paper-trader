@@ -218,3 +218,39 @@ class TestPositionSizing:
         bot = TradingBot()
         assert bot._position_size(bot.traders["US"], price=0.0) == 0.0
         assert bot._position_size(bot.traders["US"], price=-5.0) == 0.0
+
+    def test_india_never_returns_fractional_shares(self, monkeypatch):
+        # NSE/BSE brokers only fill whole shares, unlike US -- this is a
+        # real market-structure difference the user flagged, not a config
+        # choice. Every India quantity must be a whole number.
+        monkeypatch.setitem(orchestrator.MARKETS, "INDIA", {"symbols": ["RELIANCE"], "capital": 10_000.0, "india": True})
+        bot = TradingBot()
+
+        # normal target-allocation path
+        qty = bot._position_size(bot.traders["INDIA"], price=333.0, india=True)
+        assert qty == float(int(qty))
+        assert qty >= 1
+
+        # below-target fallback path (mirrors the $559.82 US scenario)
+        monkeypatch.setitem(orchestrator.MARKETS, "INDIA", {"symbols": ["RELIANCE"], "capital": 100.0, "india": True})
+        bot_small = TradingBot()
+        qty_small = bot_small._position_size(bot_small.traders["INDIA"], price=559.82, india=True)
+        assert qty_small == float(int(qty_small))
+
+    def test_india_skips_when_even_one_whole_share_unaffordable(self, monkeypatch):
+        monkeypatch.setitem(orchestrator.MARKETS, "INDIA", {"symbols": ["RELIANCE"], "capital": 10.0, "india": True})
+        bot = TradingBot()
+
+        qty = bot._position_size(bot.traders["INDIA"], price=559.82, india=True)
+
+        assert qty == 0.0
+
+    def test_us_still_gets_fractional_shares_by_default(self, monkeypatch):
+        # india defaults to False -- existing US call sites are unaffected.
+        monkeypatch.setitem(orchestrator.MARKETS, "US", {"symbols": ["AAPL"], "capital": 100.0, "india": False})
+        bot = TradingBot()
+
+        qty = bot._position_size(bot.traders["US"], price=559.82)
+
+        assert qty > 0
+        assert qty < 1  # fractional -- not forced up to a whole share

@@ -724,6 +724,20 @@ zero cash. 4 new tests added (none existed for `_position_size` before),
 including the exact $100-account/$559.82-price scenario from the real
 log. 95/95 total pass.
 
+**Follow-up correction**: the fix above (as first written) made *both*
+US and India size fractionally. User flagged that this is wrong -- NSE/BSE
+brokers only fill whole shares; only US brokers (Alpaca, Schwab, etc.)
+support fractional trading. This is a real, permanent market-structure
+difference, not a config choice. `_position_size()` now takes an
+`india: bool` param (defaults `False`, so existing US call sites are
+unaffected): every India quantity is floored to a whole share in both
+the normal-target and below-target-ceiling paths, and skips (with a
+warning) if even 1 whole share is unaffordable. US keeps the fractional
+behavior above unchanged. `run_market_cycle()` passes `india=cfg["india"]`
+through at the one call site. 5 more tests added covering both markets
+explicitly (India always whole, US still fractional, India skip-when-
+unaffordable). 98/98 total pass.
+
 Today's actual "why no trades" answer for the rest of the universe:
 no other US/India symbol made a new 20-day Donchian high above its
 100-day trend filter today — that part is a real no-signal day, not a
