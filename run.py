@@ -4,6 +4,10 @@ CLI entry point.
     python run.py cycle          # run one US + India cycle (propose-only unless AUTO_EXECUTE=true)
     python run.py cycle --market US
     python run.py cycle --stops-only   # check open positions' stop/take-profit against current price only
+    python run.py retry-entry --market US --symbol QQQ   # re-attempt one symbol's BUY that was
+                                                           # REJECTED earlier today (e.g. after a
+                                                           # sizing bug fix) -- run_market_cycle
+                                                           # itself never retries same-day by design
     python run.py backtest       # run the strategy backtest, all universes (see paper_trader/backtest/run_backtest.py)
     python run.py backtest --universe commodities
     python run.py backtest --universe crypto           # Binance spot pairs (see settings.crypto_pairs)
@@ -55,6 +59,10 @@ def main():
         help="Run a parameter sweep for the named strategy instead of the fixed strategy list",
     )
 
+    retry_parser = sub.add_parser("retry-entry")
+    retry_parser.add_argument("--market", choices=["US", "INDIA"], required=True)
+    retry_parser.add_argument("--symbol", required=True)
+
     rotation_parser = sub.add_parser("rotation")
     rotation_parser.add_argument(
         "--universe",
@@ -88,6 +96,13 @@ def main():
         if args.sweep:
             backtest_args += ["--sweep", args.sweep]
         run_backtest_main(backtest_args)
+        return
+
+    if args.command == "retry-entry":
+        logger.info(f"AUTO_EXECUTE={settings.auto_execute}")
+        bot = TradingBot()
+        result = bot.retry_entry(args.market, args.symbol)
+        print(json.dumps(result, indent=2, default=str))
         return
 
     if args.command == "rotation":

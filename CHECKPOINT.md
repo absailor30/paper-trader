@@ -759,6 +759,31 @@ exceeds the budget it was sized against. 1 new regression test
 reproduces the exact QQQ scenario (cash=$49.90, price=$736.30) and
 asserts the order now fills. 99/99 total pass.
 
+**Third follow-up (same day)**: re-triggered `stocks-cycle.yml` to verify
+the slippage/commission fix against QQQ live, and hit the system's own
+idempotency guard as designed: `client_order_id` embeds today's date
+(`QQQ:Donchian_Breakout:2026-09-21:BUY`), `place_order`'s dedup persists
+`orders`/`processed_order_ids` to Postgres via `save()`/`load()`, and a
+same-day re-run correctly returned the ORIGINAL rejected result instead
+of re-executing -- this is intentional (the docstring: "a retried cron
+run... can never double-execute a trade"), but it also means a bug fix
+can't be live-verified same-day through the normal cycle path.
+
+User chose to take the retry live rather than wait for tomorrow or edit
+the DB by hand. Added `TradingBot.retry_entry(market, symbol)`
+(`orchestrator.py`): re-fetches fresh data, re-checks
+`generate_signal()` (can't force an entry that no longer qualifies),
+sizes and places the order under a **distinct** `client_order_id`
+(`...:BUY:RETRY`) so it books as a new attempt without touching or
+replacing the original rejected record -- both stay in trade history.
+No-ops if the symbol is already an open position. Wired as
+`python run.py retry-entry --market US --symbol QQQ` and as optional
+`retry_market`/`retry_symbol` workflow_dispatch inputs on
+`stocks-cycle.yml` (blank inputs = normal cycle, unchanged). 5 new
+tests (distinct order id, original rejection untouched, skip when
+already open, skip when no signal, propose-only respected). 104/104
+total pass.
+
 Today's actual "why no trades" answer for the rest of the universe:
 no other US/India symbol made a new 20-day Donchian high above its
 100-day trend filter today — that part is a real no-signal day, not a

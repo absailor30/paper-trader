@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import numpy as np
 import pytest
 from sqlalchemy import create_engine
@@ -275,3 +277,67 @@ class TestPositionSizing:
             "QQQ:test:2026-09-21:BUY", "QQQ", "BUY", qty, 736.2999877929688, "test",
         )
         assert order["status"] == "FILLED"
+
+
+class TestRetryEntry:
+    """retry_entry() lets a REJECTED same-day BUY (e.g. one rejected by a
+    sizing bug since fixed) be re-attempted without waiting for tomorrow's
+    cycle -- run_market_cycle's own client_order_id dedup would otherwise
+    just return the cached rejection forever for that day."""
+
+    def test_uses_a_distinct_client_order_id_not_the_original(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = TradingBot()
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
+
+        result = bot.retry_entry("US", "AAPL")
+
+        assert result["action"] == "EXECUTED"
+        assert result["client_order_id"].endswith(":RETRY")
+        assert "AAPL" in bot.traders["US"].portfolio.positions
+
+    def test_does_not_touch_the_original_rejected_order(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = TradingBot()
+        trader = bot.traders["US"]
+        today = datetime.now().strftime("%Y-%m-%d")
+        original_id = f"AAPL:{bot.strategy.name}:{today}:BUY"
+        # Simulate the original same-day rejection (e.g. from the sizing bug).
+        trader.place_order(original_id, "AAPL", "BUY", 999_999.0, 100.0, bot.strategy.name)
+        assert trader._order_results[original_id]["status"] == "REJECTED"
+
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
+        result = bot.retry_entry("US", "AAPL")
+
+        assert result["action"] == "EXECUTED"
+        assert trader._order_results[original_id]["status"] == "REJECTED"  # untouched
+
+    def test_skips_when_already_an_open_position(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = TradingBot()
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
+        bot.run_market_cycle("US")
+        assert "AAPL" in bot.traders["US"].portfolio.positions
+
+        result = bot.retry_entry("US", "AAPL")
+
+        assert result == {"action": "SKIPPED", "reason": "already an open position"}
+
+    def test_skips_when_no_signal(self, monkeypatch):
+        bot = TradingBot()
+        flat = _make_ohlcv(np.full(200, 100.0), "AAPL")
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": flat})
+
+        result = bot.retry_entry("US", "AAPL")
+
+        assert result == {"action": "SKIPPED", "reason": "no signal"}
+
+    def test_propose_only_when_auto_execute_false(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", False)
+        bot = TradingBot()
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
+
+        result = bot.retry_entry("US", "AAPL")
+
+        assert result["action"] == "PROPOSED_BUY"
+        assert bot.traders["US"].portfolio.positions == {}
