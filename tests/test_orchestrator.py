@@ -181,3 +181,40 @@ class TestCheckStopsOnly:
         assert len(first) == 1
         second = bot.check_stops_only("US")
         assert second == []
+
+
+class TestPositionSizing:
+    """Real production bug (2026-09-21): a $100-capital account got a real
+    Donchian buy signal on a ~$560 stock and _position_size skipped it
+    entirely, even though fractional shares are supported end-to-end
+    (place_order takes qty as-is). Reproduces that exact scenario."""
+
+    def test_expensive_stock_against_small_account_gets_fractional_shares_not_skipped(self, monkeypatch):
+        monkeypatch.setitem(orchestrator.MARKETS, "US", {"symbols": ["AAPL"], "capital": 100.0, "india": False})
+        bot = TradingBot()
+
+        qty = bot._position_size(bot.traders["US"], price=559.82)
+
+        assert qty > 0
+        # sized up to the concentration ceiling (50% of $100), not a whole share
+        assert qty * 559.82 <= 100.0 * settings.concentration_ceiling + 1e-6
+
+    def test_normal_target_allocation_unaffected(self, monkeypatch):
+        monkeypatch.setitem(orchestrator.MARKETS, "US", {"symbols": ["AAPL"], "capital": 10_000.0, "india": False})
+        bot = TradingBot()
+
+        qty = bot._position_size(bot.traders["US"], price=100.0)
+
+        assert qty == round(10_000.0 * settings.max_position_size / 100.0, 4)
+
+    def test_zero_cash_still_skips(self, monkeypatch):
+        monkeypatch.setitem(orchestrator.MARKETS, "US", {"symbols": ["AAPL"], "capital": 100.0, "india": False})
+        bot = TradingBot()
+        bot.traders["US"].portfolio.capital = 0.0
+
+        assert bot._position_size(bot.traders["US"], price=559.82) == 0.0
+
+    def test_non_positive_price_returns_zero(self):
+        bot = TradingBot()
+        assert bot._position_size(bot.traders["US"], price=0.0) == 0.0
+        assert bot._position_size(bot.traders["US"], price=-5.0) == 0.0

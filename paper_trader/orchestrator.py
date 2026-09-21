@@ -56,25 +56,33 @@ class TradingBot:
         return True
 
     def _position_size(self, trader: PaperTrader, price: float) -> float:
+        if price <= 0:
+            return 0.0
+
         portfolio_value = trader.portfolio.total_value
         available_cash = trader.portfolio.capital
         target = portfolio_value * settings.max_position_size
         allocated = min(target, available_cash)
 
-        if price <= 0:
-            return 0.0
-
         shares = allocated / price
         if shares >= 1 or portfolio_value < 1:
             return round(shares, 4)  # fractional sizing; live order routing enforces integer shares for India separately
 
-        # Below the normal target: allow one minimum-viable share up to a
-        # hard concentration ceiling rather than silently skip the trade.
-        ceiling = portfolio_value * settings.concentration_ceiling
-        if price <= min(available_cash, ceiling):
-            return 1.0
+        # Target allocation alone can't afford even 1 share (e.g. a $500+
+        # stock against a small account's 12% target). Since fractional
+        # shares are supported end-to-end -- place_order takes qty as-is,
+        # no int rounding -- size up to the hard concentration ceiling
+        # instead of forcing a whole share: requiring a full share here
+        # would spend far more than the target risk budget, or (as found
+        # from a real production run where a real signal was silently
+        # dropped) skip a real signal outright even though the account
+        # could easily afford a fractional position.
+        ceiling_allocated = min(portfolio_value * settings.concentration_ceiling, available_cash)
+        ceiling_shares = ceiling_allocated / price
+        if ceiling_shares > 0:
+            return round(ceiling_shares, 4)
 
-        logger.warning(f"Position skipped: price {price} exceeds concentration ceiling ({ceiling:.2f}) or cash")
+        logger.warning(f"Position skipped: price {price} exceeds available cash")
         return 0.0
 
     def run_market_cycle(self, market: str) -> List[dict]:

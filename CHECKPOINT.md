@@ -696,6 +696,40 @@ and was only added Sept 19 (Saturday), so today (Mon) is its first
 scheduled fire. Whether yfinance is reachable from Actions runners is
 unverified — check its first real run's logs too.
 
+## Position sizing silently dropped real signals on small accounts (real bug, fixed)
+
+User asked why zero stock trades happened on a live US market day, and
+pointed out US supports fractional shares. Checked the actual production
+log (not an assumption) from the manually-triggered `stocks-cycle.yml`
+run and found: `Position skipped: price 559.82 exceeds concentration
+ceiling (50.00) or cash` — meaning a real Donchian buy signal DID fire on
+one US symbol, and `_position_size()` dropped it anyway.
+
+Root cause in `orchestrator.py`'s `_position_size()`: the fractional-sizing
+path only fired when `shares = allocated/price >= 1` (i.e. the 12% target
+allocation alone could buy a whole share). When price exceeds that target
+(here: $559.82 vs. a $100-capital account's $12 target), it fell through
+to a fallback that required affording one FULL share within the
+concentration ceiling — contradicting the code's own "fractional sizing"
+comment and `place_order`'s qty-as-is signature (no int rounding for US).
+Net effect: any signal on a stock priced above `capital * max_position_size`
+but the account could easily afford a fraction of was silently dropped,
+regardless of `AUTO_EXECUTE`.
+
+**Fix**: the fallback now sizes fractionally up to the hard concentration
+ceiling instead of requiring a whole share (`ceiling_allocated / price`,
+rounded to 4dp) — matches how the primary path already works, just
+against a different budget. Skip only remains for zero/negative price or
+zero cash. 4 new tests added (none existed for `_position_size` before),
+including the exact $100-account/$559.82-price scenario from the real
+log. 95/95 total pass.
+
+Today's actual "why no trades" answer for the rest of the universe:
+no other US/India symbol made a new 20-day Donchian high above its
+100-day trend filter today — that part is a real no-signal day, not a
+bug (Donchian is inherently low-frequency; see the crypto sweep result
+above for how infrequent this family of strategy trades).
+
 ## Other work this session
 
 - Sanity-checked the rotation trade log end-to-end against a synthetic
