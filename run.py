@@ -17,6 +17,8 @@ CLI entry point.
     python run.py rotation --universe india
     python run.py crypto         # one crypto paper-trading cycle (propose-only unless AUTO_EXECUTE=true)
     python run.py crypto --loop --interval-hours 24   # run cycles forever, sleeping between them
+    python run.py status         # refresh open positions to the latest price (via check_stops_only,
+                                  # so a real stop can still fire) and print P&L for US, INDIA, CRYPTO
 """
 import argparse
 import json
@@ -63,6 +65,8 @@ def main():
     retry_parser.add_argument("--market", choices=["US", "INDIA"], required=True)
     retry_parser.add_argument("--symbol", required=True)
 
+    sub.add_parser("status")
+
     rotation_parser = sub.add_parser("rotation")
     rotation_parser.add_argument(
         "--universe",
@@ -102,6 +106,19 @@ def main():
         logger.info(f"AUTO_EXECUTE={settings.auto_execute}")
         bot = TradingBot()
         result = bot.retry_entry(args.market, args.symbol)
+        print(json.dumps(result, indent=2, default=str))
+        return
+
+    if args.command == "status":
+        stock_bot = TradingBot()
+        crypto_bot = CryptoTradingBot()
+        stop_actions = stock_bot.check_all_stops_only()
+        crypto_stop_actions = crypto_bot.check_stops_only()
+        result = {
+            "US": {**stock_bot.get_status("US"), "stop_actions": stop_actions["US"]},
+            "INDIA": {**stock_bot.get_status("INDIA"), "stop_actions": stop_actions["INDIA"]},
+            "CRYPTO": {**crypto_bot.get_status(), "stop_actions": crypto_stop_actions},
+        }
         print(json.dumps(result, indent=2, default=str))
         return
 

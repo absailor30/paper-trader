@@ -857,6 +857,58 @@ bot via @BotFather, message it once, get the chat id from
 every call above silently no-ops -- confirmed safe by design, not yet
 confirmed working against a real Telegram chat.
 
+## P&L was always 0% on open positions (real bug, fixed)
+
+User pointed out the live dashboard never showed P&L. Investigating
+why turned up a real bug: `Portfolio.positions_value` computes
+`quantity * current_price`, but `current_price` was only ever set ONCE
+-- at fill time, inside `place_order()` -- and nothing ever called
+`PaperTrader.update_prices()` afterward. So `total_value`,
+`total_return_pct`, and the daily-loss/max-drawdown circuit breaker
+that reads them had been silently treating every open position as
+flat (0% unrealized P&L) for its entire life, no matter how far the
+real price moved -- not just a missing dashboard field, a genuinely
+wrong number everywhere it was read.
+
+**Fix**: `run_market_cycle()`/`run_cycle()` and `check_stops_only()` in
+both orchestrators now call `trader.update_prices(...)` with the
+latest fetched close for every open-position symbol, immediately after
+fetching, before anything else runs -- so the circuit breaker and any
+P&L read afterward are marked-to-market at least once per cycle.
+`check_stops_only()` now also persists (`_save()`) whenever it
+refreshed a price, even if no stop breached -- previously it only
+saved when it took an action, so a mark-to-market with no trade was
+silently lost on the next cold start.
+
+Added `get_status()` to both `TradingBot` and `CryptoTradingBot`:
+returns `get_performance_metrics()` plus each open position's
+`unrealized_pnl`/`unrealized_pnl_pct`. Wired as `python run.py status`
+(refreshes via `check_stops_only`/`check_all_stops_only` first, so a
+real stop can still fire, then reports US/INDIA/CRYPTO in one call) and
+a new manual-only `status.yml` workflow. 6 new tests (mark-to-market on
+both cycle and stops-only paths, persistence without a breach,
+unrealized P&L math, empty-positions case) across both orchestrators.
+121/121 total pass.
+
+## Telegram push notifications (trade fills/rejections, fetch failures)
+
+Correction to the entry below: the first attempt to verify this live
+found `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` came back empty (not
+masked `***` like `DATABASE_URL`) in a triggered job's env block --
+the secrets hadn't actually been added to the repo yet despite being
+discussed. User confirmed they exist in repo secrets now; re-verify
+with another safe (`crypto-intraday-stops.yml`) trigger and check for
+`***` masking before trusting a message actually sends.
+
+Also: user pointed out Telegram notification code already exists in
+this repo -- true, but it's dead code on `main` (`9e4a22c`, Sep 15,
+`src/notifications/telegram_notifier.py`), from before the `rebuild/v2`
+rewrite replaced the whole `src/` structure with `paper_trader/`. Not
+reachable from anything this session works on; `paper_trader/notify.py`
+(below) is the first working integration for the current codebase.
+`main` and `rebuild/v2` are intentionally left diverged per user
+instruction -- not merging them.
+
 ## Other work this session
 
 - Sanity-checked the rotation trade log end-to-end against a synthetic

@@ -195,3 +195,49 @@ class TestCheckStopsOnly:
         # Position already closed -- a second call has nothing open to check.
         second = bot.check_stops_only()
         assert second == []
+
+
+class TestMarkToMarketAndStatus:
+    """Real bug found while wiring P&L into the dashboard: current_price
+    was only ever set once, at fill time, and never refreshed."""
+
+    def test_run_cycle_marks_open_position_to_latest_close(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = CryptoTradingBot()
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date: {"BTCUSDT": _breakout_data()})
+        bot.run_cycle()
+        entry_price = bot.trader.portfolio.positions["BTCUSDT"]["current_price"]
+
+        higher = _make_ohlcv(np.full(2, entry_price * 1.10), "BTCUSDT")
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date: {"BTCUSDT": higher})
+        bot.run_cycle()
+
+        assert bot.trader.portfolio.positions["BTCUSDT"]["current_price"] == pytest.approx(entry_price * 1.10)
+
+    def test_check_stops_only_persists_mark_to_market_without_a_breach(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = CryptoTradingBot()
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date: {"BTCUSDT": _breakout_data()})
+        bot.run_cycle()
+        entry_price = bot.trader.portfolio.positions["BTCUSDT"]["current_price"]
+
+        up = _make_ohlcv(np.full(2, entry_price * 1.001), "BTCUSDT")
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date: {"BTCUSDT": up})
+        actions = bot.check_stops_only()
+
+        assert actions == []
+        bot2 = CryptoTradingBot()
+        assert bot2.trader.portfolio.positions["BTCUSDT"]["current_price"] == pytest.approx(up["close"].iloc[-1])
+
+    def test_get_status_reports_unrealized_pnl(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = CryptoTradingBot()
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date: {"BTCUSDT": _breakout_data()})
+        bot.run_cycle()
+        position = bot.trader.portfolio.positions["BTCUSDT"]
+        position["current_price"] = position["entry_price"] * 2
+
+        status = bot.get_status()
+
+        assert status["market"] == "CRYPTO"
+        assert status["positions"][0]["unrealized_pnl_pct"] == pytest.approx(100.0)

@@ -142,6 +142,14 @@ class TradingBot:
         )
         notify_fetch_failure(market, len(cfg["symbols"]), len(data))
 
+        # Mark open positions to the latest close BEFORE anything else --
+        # current_price was otherwise only ever set once, at fill time,
+        # and never refreshed, so total_value/total_return_pct (and the
+        # daily-loss/drawdown circuit breaker above, which reads them)
+        # silently reported 0% unrealized P&L on every open position
+        # forever. Real bug, found while wiring P&L into the dashboard.
+        trader.update_prices({s: float(df["close"].iloc[-1]) for s, df in data.items() if not df.empty})
+
         # 1. Exits on open positions
         for symbol, position in list(trader.portfolio.positions.items()):
             df = data.get(symbol)
@@ -308,6 +316,10 @@ class TradingBot:
             start_date=(datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d"),
             india=cfg["india"],
         )
+        prices = {s: float(df["close"].iloc[-1]) for s, df in data.items() if not df.empty}
+        trader.update_prices(prices)
+        if prices:
+            self._save(market)  # persist the mark-to-market even if no stop fires
 
         for symbol, position in list(trader.portfolio.positions.items()):
             df = data.get(symbol)
@@ -345,6 +357,28 @@ class TradingBot:
 
     def check_all_stops_only(self) -> dict:
         return {market: self.check_stops_only(market) for market in MARKETS}
+
+    def get_status(self, market: str) -> dict:
+        """Current portfolio P&L and open positions, marked to
+        current_price as it stands right now (call check_stops_only(market)
+        first for a fresh mark -- this method itself never fetches)."""
+        trader = self.traders[market]
+        metrics = trader.get_performance_metrics()
+        positions = []
+        for symbol, p in trader.portfolio.positions.items():
+            unrealized_pnl = (p["current_price"] - p["entry_price"]) * p["quantity"]
+            unrealized_pnl_pct = (p["current_price"] / p["entry_price"] - 1) * 100 if p["entry_price"] else 0.0
+            positions.append({
+                "symbol": symbol,
+                "quantity": p["quantity"],
+                "entry_price": p["entry_price"],
+                "current_price": p["current_price"],
+                "unrealized_pnl": unrealized_pnl,
+                "unrealized_pnl_pct": unrealized_pnl_pct,
+                "stop_loss": p.get("stop_loss"),
+                "take_profit": p.get("take_profit"),
+            })
+        return {"market": market, **metrics, "positions": positions}
 
     def _save(self, market: str):
         self.traders[market].save(f"{market.lower()}_portfolio")

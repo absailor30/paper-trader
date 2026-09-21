@@ -381,3 +381,67 @@ class TestRetryEntry:
 
         assert result["action"] == "PROPOSED_BUY"
         assert bot.traders["US"].portfolio.positions == {}
+
+
+class TestMarkToMarketAndStatus:
+    """Real bug found while wiring P&L into the dashboard: current_price
+    was only ever set once, at fill time, and never refreshed --
+    total_value/total_return_pct (and get_status()'s unrealized P&L)
+    silently stayed at the entry price forever. run_market_cycle() and
+    check_stops_only() must now mark every open position to the latest
+    fetched close before anything else."""
+
+    def test_run_market_cycle_marks_open_position_to_latest_close(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = TradingBot()
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
+        bot.run_market_cycle("US")
+        entry_price = bot.traders["US"].portfolio.positions["AAPL"]["current_price"]
+
+        higher = _make_ohlcv(np.full(2, entry_price * 1.10), "AAPL")
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": higher})
+        bot.run_market_cycle("US")
+
+        assert bot.traders["US"].portfolio.positions["AAPL"]["current_price"] == pytest.approx(entry_price * 1.10)
+
+    def test_check_stops_only_marks_to_market_and_persists_even_without_a_breach(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = TradingBot()
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
+        bot.run_market_cycle("US")
+        entry_price = bot.traders["US"].portfolio.positions["AAPL"]["current_price"]
+
+        # A small price move (well inside stop_loss/take_profit either
+        # way) -- should still mark to market without triggering a sell.
+        up = _make_ohlcv(np.full(2, entry_price * 1.001), "AAPL")
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": up})
+        actions = bot.check_stops_only("US")
+
+        assert actions == []  # no stop breach, nothing executed
+        assert bot.traders["US"].portfolio.positions["AAPL"]["current_price"] == pytest.approx(up["close"].iloc[-1])
+
+        bot2 = TradingBot()  # reload from persisted state
+        assert bot2.traders["US"].portfolio.positions["AAPL"]["current_price"] == pytest.approx(up["close"].iloc[-1])
+
+    def test_get_status_reports_unrealized_pnl(self, monkeypatch):
+        monkeypatch.setattr(settings, "auto_execute", True)
+        bot = TradingBot()
+        monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
+        bot.run_market_cycle("US")
+        position = bot.traders["US"].portfolio.positions["AAPL"]
+        position["current_price"] = position["entry_price"] * 2  # simulate a fresh, favorable mark
+
+        status = bot.get_status("US")
+
+        assert status["market"] == "US"
+        assert status["num_positions"] == 1
+        pos = status["positions"][0]
+        assert pos["symbol"] == "AAPL"
+        assert pos["unrealized_pnl"] == pytest.approx(position["entry_price"] * position["quantity"])
+        assert pos["unrealized_pnl_pct"] == pytest.approx(100.0)
+
+    def test_get_status_with_no_positions(self):
+        bot = TradingBot()
+        status = bot.get_status("US")
+        assert status["positions"] == []
+        assert status["num_positions"] == 0
