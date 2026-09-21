@@ -738,6 +738,27 @@ through at the one call site. 5 more tests added covering both markets
 explicitly (India always whole, US still fractional, India skip-when-
 unaffordable). 98/98 total pass.
 
+**Second follow-up (same day, after a real trade finally executed)**: the
+fixes above were validated against a real triggered `stocks-cycle.yml`
+run -- AMD bought (0.0814 shares @ $614.91, FILLED), the system's first
+ever real trade. But the same cycle's QQQ signal was REJECTED:
+`Insufficient capital for QQQ: need 50.00, have 49.90`. User asked "we
+can take in for less than $50?" -- correct instinct, and it exposed one
+more real bug in `_position_size()`: sizing computed `shares = allocated
+/ price` using the *raw* signal price, but `place_order` fills BUYs at
+`price * (1 + slippage_rate)` and adds commission on top -- so a trade
+sized to exactly fit available cash always budgeted slightly *less* than
+the real `total_cost`, and got spuriously rejected right at the capital
+boundary. Same bug class as the rotation-backtest capital-rejection fix
+already in the bug log below, just never applied here.
+
+**Fix**: `_position_size()` now sizes off `price * (1 + slippage_rate) *
+(1 + commission_rate)` instead of raw price, in both the target and
+ceiling-fallback paths, so the sized quantity's real fill cost never
+exceeds the budget it was sized against. 1 new regression test
+reproduces the exact QQQ scenario (cash=$49.90, price=$736.30) and
+asserts the order now fills. 99/99 total pass.
+
 Today's actual "why no trades" answer for the rest of the universe:
 no other US/India symbol made a new 20-day Donchian high above its
 100-day trend filter today — that part is a real no-signal day, not a

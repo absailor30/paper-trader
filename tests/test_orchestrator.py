@@ -205,7 +205,9 @@ class TestPositionSizing:
 
         qty = bot._position_size(bot.traders["US"], price=100.0)
 
-        assert qty == round(10_000.0 * settings.max_position_size / 100.0, 4)
+        trader = bot.traders["US"]
+        effective_price = 100.0 * (1 + trader.slippage_rate) * (1 + trader.commission_rate)
+        assert qty == round(10_000.0 * settings.max_position_size / effective_price, 4)
 
     def test_zero_cash_still_skips(self, monkeypatch):
         monkeypatch.setitem(orchestrator.MARKETS, "US", {"symbols": ["AAPL"], "capital": 100.0, "india": False})
@@ -254,3 +256,22 @@ class TestPositionSizing:
 
         assert qty > 0
         assert qty < 1  # fractional -- not forced up to a whole share
+
+    def test_sized_quantity_never_gets_rejected_for_insufficient_capital(self, monkeypatch):
+        """Real production bug (2026-09-21): QQQ was sized to fit the exact
+        remaining cash, then place_order REJECTED it anyway ("need $50.00,
+        have $49.90") because sizing ignored the slippage+commission
+        place_order adds on top of raw price. Reproduces the exact
+        low-cash-after-a-prior-fill scenario and asserts the order fills."""
+        monkeypatch.setitem(orchestrator.MARKETS, "US", {"symbols": ["QQQ"], "capital": 100.0, "india": False})
+        bot = TradingBot()
+        trader = bot.traders["US"]
+        trader.portfolio.capital = 49.90  # cash left after a prior same-cycle fill
+
+        qty = bot._position_size(trader, price=736.2999877929688)
+        assert qty > 0
+
+        order = trader.place_order(
+            "QQQ:test:2026-09-21:BUY", "QQQ", "BUY", qty, 736.2999877929688, "test",
+        )
+        assert order["status"] == "FILLED"

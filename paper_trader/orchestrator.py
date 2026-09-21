@@ -70,7 +70,17 @@ class TradingBot:
         target = portfolio_value * settings.max_position_size
         allocated = min(target, available_cash)
 
-        shares = allocated / price
+        # place_order fills BUYs at price*(1+slippage_rate) and adds
+        # commission on top of that -- sizing off raw `price` alone
+        # budgets less than the real total_cost, so a trade sized right at
+        # the edge of available cash spuriously gets REJECTED downstream
+        # (seen for real: QQQ sized to fit $49.90 cash, then rejected
+        # needing $50.00 once slippage+commission were applied). Same bug
+        # class as the rotation-backtest capital-rejection fix -- reserve
+        # the same headroom here.
+        effective_price = price * (1 + trader.slippage_rate) * (1 + trader.commission_rate)
+
+        shares = allocated / effective_price
         if shares >= 1 or portfolio_value < 1:
             return math.floor(shares) if india else round(shares, 4)
 
@@ -86,7 +96,7 @@ class TradingBot:
         # a whole share below the ceiling is the best this account can
         # do -- there is no smaller unit to fall back to.
         ceiling_allocated = min(portfolio_value * settings.concentration_ceiling, available_cash)
-        ceiling_shares = ceiling_allocated / price
+        ceiling_shares = ceiling_allocated / effective_price
 
         if india:
             whole_shares = math.floor(ceiling_shares)
