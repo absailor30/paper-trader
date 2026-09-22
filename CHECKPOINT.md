@@ -4,6 +4,44 @@
 **Branch**: `rebuild/v2` (not merged to `main` — `main` still has the previous
 architecture live on Render, untouched by this branch)
 
+## Dashboard moved to GitHub Pages; circuit-breaker Telegram alert added (2026-09-22)
+
+The claude.ai Artifact + Claude-relayed-cron dashboard proved unreliable:
+the recurring cron jobs are session-scoped and got silently dropped
+twice when this Claude Code session restarted, leaving the dashboard
+stale with no way to detect it short of the user noticing. Also caused
+a real trust incident: wrote a guessed `$10,084.31` total_value into it
+(from a truncated log tail) instead of the real `$99.71` -- caught by
+the user, documented above under "P&L was always 0%...".
+
+**Fix**: replaced it entirely. `status.yml` now runs on GitHub's own
+schedule (same market-hours/off-hours cadence), renders `python run.py
+status`'s JSON into a static page via the new
+`scripts/render_status_page.py`, and publishes it with
+`actions/deploy-pages` -- **no Claude session involved at all**. Live at
+`https://absailor30.github.io/paper-trader/`. The old claude.ai Artifact
+is now frozen/abandoned; don't confuse the two if checking status later.
+
+Caveat found the same day: GitHub's own `schedule:` trigger is
+best-effort and can silently skip runs for hours under load (confirmed:
+a ~3 hour gap on 2026-09-22 with the workflow still `state: active`,
+nothing wrong on our end) -- if the page looks stale, a manual
+`workflow_dispatch` trigger on `status.yml` always works immediately;
+don't assume something is broken from a gap alone.
+
+Also added `notify_circuit_breaker()`: `check_risk_limits()` tripping
+(daily loss or max drawdown) was previously silent -- log line only, no
+Telegram alert -- discovered when a real US daily-loss trip (-5.61% on
+2026-09-22) blocked all entries with nothing surfaced outside job logs.
+Wired into both orchestrators wherever `check_risk_limits()` returns
+False. 1 new test, 122/122 total pass. Not yet confirmed against a real
+trip (the condition had recovered by the time this was tested) -- the
+next real breach is the first live confirmation.
+
+Real trade same day: **AAPL bought (0.0001 shares @ $339.92, FILLED)**
+once the US circuit breaker cleared -- a new Donchian breakout signal,
+first AAPL position this account has held.
+
 ## START HERE if you're a new session picking this up (2026-09-21 handoff)
 
 Task for this session: **backtest new crypto strategy candidates against
