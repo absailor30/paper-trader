@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from paper_trader.config import settings
-from paper_trader.notify import notify_fetch_failure, notify_order, send_telegram_message
+from paper_trader.notify import notify_circuit_breaker, notify_fetch_failure, notify_order, send_telegram_message
 
 
 def test_send_telegram_message_noop_when_unconfigured(monkeypatch):
@@ -64,6 +64,14 @@ def test_notify_fetch_failure_sends_when_zero_received():
         notify_fetch_failure("CRYPTO", 8, 0)
     mock_send.assert_called_once()
     assert "0/8" in mock_send.call_args[0][0]
+
+
+def test_notify_circuit_breaker_sends_with_reason():
+    with patch("paper_trader.notify.send_telegram_message") as mock_send:
+        notify_circuit_breaker("US", "daily loss limit reached (-5.61%)")
+    mock_send.assert_called_once()
+    text = mock_send.call_args[0][0]
+    assert "US" in text and "daily loss limit reached (-5.61%)" in text
 
 
 def test_notify_fetch_failure_silent_when_some_data_received():

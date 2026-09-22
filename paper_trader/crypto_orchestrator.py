@@ -24,7 +24,7 @@ from loguru import logger
 from paper_trader.config import settings
 from paper_trader.data.binance_fetcher import BinanceFetcher
 from paper_trader.execution.paper_trader import PaperTrader
-from paper_trader.notify import notify_fetch_failure, notify_order
+from paper_trader.notify import notify_circuit_breaker, notify_fetch_failure, notify_order
 from paper_trader.strategy.base import Position
 from paper_trader.strategy.donchian_breakout import DonchianBreakoutStrategy
 
@@ -46,10 +46,14 @@ class CryptoTradingBot:
     def check_risk_limits(self) -> bool:
         metrics = self.trader.get_performance_metrics()
         if metrics["daily_return_pct"] < -settings.max_daily_loss * 100:
-            logger.warning(f"CRYPTO: daily loss limit reached ({metrics['daily_return_pct']:.2f}%)")
+            reason = f"daily loss limit reached ({metrics['daily_return_pct']:.2f}%)"
+            logger.warning(f"CRYPTO: {reason}")
+            notify_circuit_breaker("CRYPTO", reason)
             return False
         if metrics["total_return_pct"] < -settings.max_drawdown * 100:
-            logger.warning(f"CRYPTO: max drawdown reached ({metrics['total_return_pct']:.2f}%)")
+            reason = f"max drawdown reached ({metrics['total_return_pct']:.2f}%)"
+            logger.warning(f"CRYPTO: {reason}")
+            notify_circuit_breaker("CRYPTO", reason)
             return False
         return True
 

@@ -17,7 +17,7 @@ from loguru import logger
 from paper_trader.config import settings
 from paper_trader.data.fetcher import DataFetcher
 from paper_trader.execution.paper_trader import PaperTrader
-from paper_trader.notify import notify_fetch_failure, notify_order
+from paper_trader.notify import notify_circuit_breaker, notify_fetch_failure, notify_order
 from paper_trader.strategy.base import Position
 from paper_trader.strategy.donchian_breakout import DonchianBreakoutStrategy
 
@@ -60,10 +60,14 @@ class TradingBot:
     def check_risk_limits(self, market: str) -> bool:
         metrics = self.traders[market].get_performance_metrics()
         if metrics["daily_return_pct"] < -settings.max_daily_loss * 100:
-            logger.warning(f"{market}: daily loss limit reached ({metrics['daily_return_pct']:.2f}%)")
+            reason = f"daily loss limit reached ({metrics['daily_return_pct']:.2f}%)"
+            logger.warning(f"{market}: {reason}")
+            notify_circuit_breaker(market, reason)
             return False
         if metrics["total_return_pct"] < -settings.max_drawdown * 100:
-            logger.warning(f"{market}: max drawdown reached ({metrics['total_return_pct']:.2f}%)")
+            reason = f"max drawdown reached ({metrics['total_return_pct']:.2f}%)"
+            logger.warning(f"{market}: {reason}")
+            notify_circuit_breaker(market, reason)
             return False
         return True
 

@@ -51,6 +51,14 @@ def notify_order(market: str, order: dict) -> None:
     send_telegram_message("\n".join(lines))
 
 
+def notify_circuit_breaker(market: str, reason: str) -> None:
+    """Call when check_risk_limits() trips (daily loss or max drawdown) --
+    this silently blocks all new entries for the rest of the cycle with
+    only a log line, otherwise (e.g. the real -5.61% US daily-loss trip
+    that motivated this)."""
+    send_telegram_message(f"\U0001F6D1 <b>{market} circuit breaker</b>\n{reason} -- new entries blocked this cycle.")
+
+
 def notify_fetch_failure(market: str, requested: int, received: int) -> None:
     """Call when a fetch cycle comes back with far less data than
     requested -- e.g. every symbol 451ing/404ing silently, the exact
