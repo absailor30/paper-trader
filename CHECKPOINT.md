@@ -1,40 +1,43 @@
 # Project Checkpoint
 
-**Date**: 2026-09-16
+**Date**: 2026-09-23
 **Branch**: `rebuild/v2` (not merged to `main` — `main` still has the previous
 architecture live on Render, untouched by this branch)
 
-## START HERE if you're a new session picking this up (2026-09-21 handoff)
+## START HERE if you're a new session picking this up (2026-09-23 handoff)
 
-Task for this session: **backtest new crypto strategy candidates against
-real data** — jump straight to "Next: crypto strategy candidates to
-backtest" further down this file for the full prioritized list and
-context. Short version:
+**Read this block, then the four "RESULTS" sections dated 2026-09-21/22/23 at
+the bottom of this file before anything else.** A lot was invalidated in that
+session; several older sections above are now marked SUPERSEDED inline.
 
-1. Read "Next: crypto strategy candidates to backtest" in full before
-   doing anything — it has the ranked candidate list, what's already
-   been tried and ruled out for crypto, and exact effort estimates.
-2. **Start with Momentum Rotation on crypto** — highest effort-to-signal
-   ratio. The code already exists (`paper_trader/backtest/rotation_backtest.py`,
-   `run_rotation_backtest.py`) and already has a proven edge on US
-   equities (+149.56% vs +119.32% benchmark); it's just never been
-   pointed at `settings.crypto_pairs` via `BinanceFetcher`. Extend
-   `run_rotation_backtest.py`'s `--universe` option to accept `crypto`,
-   mirroring the pattern `run_backtest.py` already uses.
-3. **You cannot get real crypto data from inside a sandboxed session** —
-   confirmed by direct test, not assumed: this sandbox's own egress
-   proxy 403s both `api.binance.com` and `data-api.binance.vision`
-   outright. Real backtests need to run either on the user's own laptop
-   (ask them to run the command and paste back the output) or triggered
-   via GitHub Actions and read back through job logs — same pattern
-   used throughout this whole checkpoint. Do not report a "result" from
-   data you couldn't actually verify came from a live run.
-4. Every real result — win or lose, validated or not — gets a new dated
-   entry in this file with the actual numbers, same format as every
-   other entry here. Don't just narrate results in chat.
-5. Nothing gets promoted to the live `CryptoTradingBot` strategy without
-   an explicit ask and a real-data result backing it, same rule as every
-   strategy swap so far in this project.
+State of play, shortest honest version:
+
+1. **Binance is reachable from a sandbox session now** (the allowlist fixed
+   the proxy 403). Real crypto backtests run in-sandbox — every older note in
+   this file telling you to run them on the user's laptop is obsolete. GitHub
+   Actions' separate 451 geo-block is NOT fixed and remains unverified.
+2. **Only one thing still looks like an edge: Donchian on large-cap crypto**
+   (47-51% win rate, PF 2.1-2.3). It has NOT yet been through the same
+   out-of-sample gauntlet that killed the other candidate — that test is
+   half-finished (180/720 cells cached) and is the top open task.
+3. **Things that died in that session, do not re-litigate without new
+   evidence**: Momentum Rotation on crypto (0/12 configs beat BTC), Bollinger
+   reversion (narrow param spike, fails out-of-sample), Mean Reversion RSI
+   (PF 0.65, loses money — retire it), MACD (median return -0.3%).
+4. **Two metrics in this file are deprecated.** "Validated count" is
+   anti-correlated with bucket quality (it rewards strategies on falling
+   assets), and mean-of-profit-factor is dominated by low-trade-count
+   outliers. Use **median PF + profitable-coin count + a >=15 trade floor**,
+   and always report buy-and-hold alongside so "real edge" can be told from
+   "lost less than a falling benchmark."
+5. **There is a real, unfixed bug**: `atr_stop_multiple = 3.5` is equity-tuned
+   and places stops a median **26% below entry** on crypto — functionally
+   inactive. This affects the deployed `CryptoTradingBot`, not just the
+   strategies under test. Nothing has been changed; it needs a deliberate
+   sweep.
+6. Standing rules unchanged: every real result gets a dated entry here with
+   actual numbers, not a chat narration; nothing is promoted to live without
+   an explicit ask and a real-data result behind it.
 
 ## Why this rebuild happened
 
@@ -117,49 +120,87 @@ fix to trust on faith):
 - `run_backtest.py` now runs both strategies and prints separate
   per-strategy verdicts.
 
-## Strategy scoreboard (as of 2026-09-17, full real-data run)
+## Strategy scoreboard — CONSOLIDATED (last updated 2026-09-23)
 
-Single source of truth for what's actually been tested against real
-market data and what the result was. Update this table, don't just
-narrate results in chat, every time a real backtest result comes back.
+Single source of truth for what has been tested against real market data and
+what the result was. Update this section, don't just narrate results in chat,
+every time a real backtest result comes back.
 
-Full run: `python run.py backtest` across US (24 symbols), India (14,
-TATAMOTORS.NS delisted/unavailable), Commodities (4) — 42 symbols total
-per strategy, 3 strategies, 1993 trades combined.
+**Read the methodology note before reading the numbers**, because rows here
+were produced under two different standards and they are not interchangeable.
 
-| Strategy | Symbols validated | Avg win rate | Avg profit factor | Avg max drawdown |
+- **Old standard (through 2026-09-20)**: "validated" = profitable AND beat
+  buy-and-hold AND >=5 trades, summarized with *mean* win rate / profit factor.
+- **Current standard (from 2026-09-21)**: validated-count is DEPRECATED — it is
+  anti-correlated with universe quality, because beating a collapsed benchmark
+  is easy and it rewards strategies on falling assets. Mean-of-profit-factor is
+  also DEPRECATED — PF is a ratio and its mean is dominated by low-trade-count
+  outliers (one Bollinger cell showed mean PF 4.13 vs median 1.40, max 58.1 on
+  ~10 trades). Use **median PF + profitable-coin count + a >=15 trade floor**,
+  and always report buy-and-hold alongside.
+
+Rows are tagged [OLD] or [NEW] accordingly. A [OLD] row is not wrong, but its
+headline metric is weaker evidence than a [NEW] row's.
+
+### Single-symbol strategies
+
+| Strategy | Universe | Headline | Std | Verdict |
 |---|---|---|---|---|
-| Trend Following (SMA 50/200 + ATR stop) | 3/42 | 26.4% | 1.49 | -2.72% |
-| Mean Reversion (RSI oversold-recovery) | 0/42 | 52.5% | 1.67 | -2.14% |
-| Donchian Breakout (20d entry / 10d exit) | 3/42 | 43.9% | 1.72 | -3.68% |
+| Donchian (20/10) | US+India+commodities, 42 sym | 3/42 val, 43.9% WR, PF 1.72, DD -3.68% | [OLD] | Best of the equity three, short of the bar |
+| Donchian (20/10 + trend100) | US+India+commodities, 42 sym | 5/42 val, 43.6% WR, PF 1.64, DD -3.16% | [OLD] | Equity default; trend filter helped |
+| Donchian (55/20 turtle) | Crypto, 8 pairs | 5/8 val, 45.8% WR, PF 1.76, DD -8.10% | [OLD] | Crypto default; beat trend100 here |
+| **Donchian (all variants)** | **Crypto LARGE cap** | **47-51% WR, PF 2.1-2.3, DD -10 to -12%** | **[NEW]** | **BEST SURVIVING CANDIDATE — gauntlet incomplete** |
+| Donchian (all variants) | Crypto MID cap | 41-45% WR, PF 1.56-1.88 | [NEW] | Degrades from large |
+| Donchian (all variants) | Crypto SMALL cap | 36-40% WR, PF 1.40-1.54; PF 2.79 risers vs 1.27 fallers | [NEW] | Edge does NOT transfer down-cap |
+| Trend Following (SMA 50/200) | US+India+commodities | 3/42 val, 26.3% WR, PF 1.47 | [OLD] | Weakest of the equity three |
+| Trend Following (SMA 50/200) | Crypto, all tiers | 21-28% WR, PF 1.18-2.05 | [NEW] | Weak everywhere; whipsaws in 24/7 markets |
+| **Mean Reversion (RSI)** | US+India+commodities | 0/42 val, 52.9% WR, PF 1.72 | [OLD] | — |
+| **Mean Reversion (RSI)** | **Crypto small cap, 40 coins** | **PF 0.65, profitable on 4/24 coins, -4.9% avg** | **[NEW]** | **DEAD — loses money. Adding an SMA200 trend filter did not rescue it. RETIRE.** |
+| MACD (true EMA 12/26/9) | Crypto small cap, 40 coins | PF 1.06, **median return -0.3%**, 2067 trades, 20/40 profitable | [NEW] | **NULL — coin flip that pays commission 2000x** |
+| MA crossover (SMA 12/26) | Crypto, all tiers | 33-40% WR, PF 1.40-1.68 | [NEW] | SMALL-cap "8/10 validated" is an ARTIFACT (see below) |
+| **Bollinger reversion (20/2)** | **Crypto small cap, 40 coins** | **median PF 1.02-1.18, ~half coins profitable** | **[NEW]** | **KILLED — narrow param spike, fails out-of-sample, fell>rose property inverts** |
+| Bollinger breakout (20/2) | Crypto small cap | 33.6% WR, mean PF 1.58 | [NEW] | Untested against the gauntlet |
+| Keltner breakout (20/2) | Crypto small cap | 35.3% WR, mean PF 1.70 | [NEW] | Untested against the gauntlet |
+| 52-week-high proximity | Crypto small cap | 40.5% WR, mean PF 2.11, DD -5.4% | [NEW] | Best PF/DD but only n=13 coins — UNDERPOWERED |
+| TSMOM (90d) | Crypto small cap | 31.9% WR, mean PF 1.32 | [NEW] | Modest |
+| TSMOM vol-managed | Crypto small cap | 31.5% WR, mean PF 1.49, DD -8.2% | [NEW] | Cuts DD, halves returns, 17/34 profitable |
+| Short-term reversal (7d) | Crypto small cap | 42.5% WR, mean PF 1.26, DD -21.7% | [NEW] | Underperformed its literature; my per-coin threshold is not a fair test of a cross-sectional effect |
+| Low-volatility | Crypto small cap | 19.5% WR, mean PF 1.28, 21/39 profitable | [NEW] | **NULL** |
 
-"Validated" = profitable AND beat buy-and-hold AND >=5 trades — a near-
-impossible bar in this 2022-2026 window (extreme bull run, e.g. NVDA
-+1300%), so the win-rate/profit-factor columns are the more honest read.
+### Portfolio-level (cross-sectional) strategies
 
-**Read**: Mean Reversion has the best win rate and lowest drawdown but
-literally 0/42 beat buy-and-hold (small, choppy gains vs. a runaway
-market). Donchian has the best profit factor (1.72) and a respectable
-win rate (43.9%) but the widest drawdown. Trend Following is weakest on
-every axis — the whipsaw fix helped it stop losing money outright but it
-still has the lowest win rate of the three. None of the three has a
-demonstrated edge worth auto-executing yet; Donchian and Mean Reversion
-are the two worth refining further before Trend Following.
-
-| Strategy | Universe | Result | Validated? |
+| Strategy | Universe | Result | Verdict |
 |---|---|---|---|
-| Momentum Rotation (top-5, 126d lookback, 21d rebalance) | US (widened) | **+143.37%** vs +116.10% benchmark, CAGR +21.91%, Sharpe 0.98, max DD -28.87%, 54 rebalances, 523 trades — re-run **after** the insufficient-capital bug fix | **YES — POSITIVE EDGE** |
-| Momentum Rotation | India | +5.24% vs +49.88% benchmark, CAGR +1.15%, Sharpe 0.15, max DD -25.08%, 53 rebalances, 496 trades — re-run after fix | No |
+| Momentum Rotation (top-5, 126d/21d) | US (widened) | +149.56% vs +119.32% benchmark, CAGR +22.58%, Sharpe 1.01, DD -28.87% — twice confirmed | **POSITIVE EDGE** (vs equal-weight basket) |
+| Momentum Rotation | India | +5.79% vs +50.73% benchmark, Sharpe 0.16 | Not validated |
+| **Momentum Rotation** | **Crypto, 20 pairs, 12 configs** | **best +263.67% vs BTC +349.73%, DD -57%. 7/12 beat equal-weight basket, 0/12 beat BTC** | **NOT VALIDATED** |
 
-**This is the first validated strategy in the rebuild.** The capital-allocation
-fix flipped the US verdict: pre-fix it returned +60.29% vs a +117.00%
-benchmark (not validated, lost to buy-and-hold); post-fix, with orders no
-longer being spuriously rejected mid-rebalance, it returns +143.37% vs a
-+116.10% benchmark — the strategy now actually holds the positions its logic
-selects instead of silently missing fills, and that alone was enough to beat
-the benchmark. India stays not validated — same fix applied, still a real
-gap (+5.24% vs +49.88%), so the edge there (if any) is universe-specific, not
-a residual bug.
+### What this scoreboard actually says
+
+**One candidate survives: Donchian on large-cap crypto.** It has the best
+risk-adjusted numbers anywhere in the grid and is consistent across all three
+Donchian variants — which also means the 55/20-vs-trend100 distinction matters
+less than the cap tier does. It has NOT yet been through the out-of-sample
+gauntlet that killed Bollinger. Until it has, treat it as promising, not proven.
+
+**Four things are dead or null** and should not be re-litigated without new
+evidence: Mean Reversion RSI (loses money), MACD (null), Bollinger reversion
+(killed under sweep + out-of-sample), Momentum Rotation on crypto (never beats
+BTC). Low-vol is null on this sample.
+
+**Two caveats apply to the whole board.** (1) The US rotation edge is measured
+against an *equal-weight basket*, not SPY — the crypto run showed that basket
+benchmarks are soft when one asset dominates, so that +149.56% is weaker
+evidence than it looks. (2) Every crypto row is survivorship-biased: buckets are
+built from today's liquidity over historical windows, so coins that died
+(MATIC, FTM, and many smaller) are absent entirely. Nothing on this board except
+the Bollinger test is cross-validated across time periods, and that one failed.
+
+**Apparent wins that are artifacts, recorded so they are not rediscovered:**
+MA crossover showed 8/10 "validated" on crypto small caps — but 8/10 of those
+coins had negative buy-and-hold (median -21.4%), and the wins are near-zero
+absolute returns clearing a collapsed benchmark (ARB +3.9% vs bench -72.3%).
+It *fails* on the one small-cap that rose. Not an edge.
 
 ## Re-run confirmation (2026-09-17, from an environment with real internet + Supabase access)
 
@@ -348,7 +389,11 @@ pull.
    workflows are live and confirmed writing to Postgres. Explicit
    two-consecutive-runs continuity check still worth doing (see "Still
    open" above) but the mechanism is proven working.
-4. Decide whether to iterate on Donchian (best profit factor among the
+4. ~~Decide whether to iterate on Donchian or Mean Reversion~~ — **RESOLVED
+   (2026-09-22)**: Mean Reversion is dead (PF 0.65, 4/24 coins profitable).
+   Donchian is the survivor, and is specifically a *large-cap* strategy; its
+   edge degrades monotonically down the cap tiers. Original text:
+   Decide whether to iterate on Donchian (best profit factor among the
    single-symbol strategies) or Mean Reversion (best win rate/drawdown) —
    neither is validated as-is but both show more promise than Trend
    Following.
@@ -704,7 +749,10 @@ re-run these blind, extend or sweep them instead:**
 - Trend Following (SMA 50/200) — weak (1/8 validated, PF 0.72), whipsaws
   badly in crypto's 24/7 no-overnight-gap market.
 - Mean Reversion (RSI oversold-recovery) — weak (2/8 validated, PF 0.89).
-- Momentum Rotation — **never run on crypto**, only US/India equities
+- Momentum Rotation — ~~never run on crypto~~ **RUN 2026-09-21: NOT
+  VALIDATED.** 12-config sweep, 0/12 beat BTC-only buy-and-hold (best
+  +263.67% vs BTC +349.73%, -57% drawdown). See the dated section below.
+  Original text: only US/India equities
   (where it's the one strategy with a confirmed, twice-verified edge:
   +149.56% vs +119.32% benchmark on US). `run_rotation_backtest.py`
   currently only wires `us`/`india` universes to `DataFetcher` — extending
@@ -742,6 +790,13 @@ assume any of these work before running them):**
    real economic reason for an edge, unlike price-action strategies
    borrowed wholesale from equities) — worth doing once the simpler
    candidates above are exhausted.
+
+> **SUPERSEDED (2026-09-21)**: the sandbox network block described below was
+> lifted by an allowlist change. `api.binance.com`, `data-api.binance.vision`
+> and `fapi.binance.com` all return HTTP 200 in-sandbox now, and full
+> paginated fetches work for all pairs. Ignore the "run it on the user's
+> laptop" instruction. The GitHub Actions 451 is a DIFFERENT block and is
+> still unresolved.
 
 **Practical note for the next session (confirmed, not speculative)**:
 tested `BinanceFetcher().fetch("BTCUSDT", ...)` directly in this sandbox
@@ -1062,3 +1117,359 @@ instruction -- not merging them.
 | `profit_factor` returned 0.0 for a 100% win rate (no losing trades) | Real NVDA mean-reversion backtest | Return `inf` when there are wins and no losses |
 | "POSITIVE EDGE" label on strategies that lost money but beat an even-more-negative benchmark | Real 38-symbol India backtest (TCS/INFY/WIPRO/HINDUNILVR) | `is_validated()` now also requires `total_return_pct > 0` |
 | Rotation rebalancing spuriously rejected buy orders for "insufficient capital" on nearly every rebalance | Real US+India rotation backtest trade log | Reserve slippage+commission headroom in allocation calc; floor (not round) quantity so early buys can't overspend and starve later ones; epsilon tolerance on the capital check |
+
+---
+
+# RESULTS: 2026-09-21 -> 2026-09-23 session
+
+## Sandbox egress to Binance now works (2026-09-21) — resolves a standing blocker
+
+User whitelisted `binance.com` on the Claude side. Re-tested with real klines
+requests, not pings:
+
+| Target | Result |
+|---|---|
+| `api.binance.com` `/api/v3/klines` | **HTTP 200**, real OHLCV, `x-mbx-used-weight: 2` |
+| `data-api.binance.vision` `/api/v3/klines` | **HTTP 200** |
+| `fapi.binance.com` `/fapi/v1/klines` (futures) | **HTTP 200** |
+| `BinanceFetcher`, spot + futures, paginated | 1625 daily bars each, 2022-04-11 → 2026-09-21 |
+| All 8 `crypto_pairs`, spot | **8/8**, 1625 rows each |
+
+This supersedes every "real crypto backtests must run on the user's laptop"
+note earlier in this file. **Crypto backtests now run in-sandbox.**
+
+Two failure modes that this file had already documented separately, now
+confirmed distinct:
+
+- **Sandbox failure was `403` at the CONNECT/tunnel level** — Claude's own
+  egress proxy refusing the tunnel before reaching Binance. This is what the
+  whitelist fixed.
+- **GitHub Actions failure was `451` from Binance itself** — datacenter-IP
+  geo-blocking. A Claude-side allowlist has no bearing on it.
+
+**Still unverified**: whether `crypto-cycle.yml` still 451s from Actions
+runners, and whether the `data-api.binance.vision` fallback works there. The
+fallback branch could not be exercised even now, because the primary host
+succeeds from here, so it remains covered only by mocked tests. Check a real
+run's logs for `"fetched via fallback host"` before trusting it.
+
+Correction to an earlier entry: this file states futures "still fails hard on
+a block" with no fallback. True in principle, but futures fetches fine from
+the sandbox now, so a margin-aware futures backtest is no longer data-blocked.
+
+---
+
+## Momentum Rotation on crypto: NOT VALIDATED (2026-09-21)
+
+First run of rotation against crypto. Widened universe to 20 pairs with
+complete 2022-04-11 → 2026-09-21 history (1625 bars, verified by fetch).
+Excluded for partial history: OPUSDT, APTUSDT, ARBUSDT, SUIUSDT, TIAUSDT.
+Excluded as delisted mid-window: MATICUSDT (ends 2024-09), FTMUSDT (ends
+2025-01) — keeping only survivors is itself a bias, recorded not papered over.
+
+Sweep: top_n 3/5/8 × calendars 126/21 and 182/30, both the wide 20-pair and
+the narrow 8-pair universes. Sharpe annualized at 365 (not 252) for crypto.
+
+| Universe | top_n | cal | Return | EW bench | BTC bench | Sharpe | maxDD | >EW | >BTC |
+|---|---|---|---|---|---|---|---|---|---|
+| WIDE20 | 8 | 182/30 | **+263.67%** | +101.99% | +349.73% | 0.84 | -56.77% | Y | **n** |
+| WIDE20 | 5 | 182/30 | +176.37% | +101.99% | +349.73% | 0.72 | -60.75% | Y | n |
+| WIDE20 | 8 | 126/21 | +138.58% | +70.83% | +257.10% | 0.65 | -71.63% | Y | n |
+| WIDE20 | 3 | 182/30 | +96.61% | +101.99% | +349.73% | 0.59 | -70.48% | n | n |
+| WIDE20 | 3 | 126/21 | +84.06% | +70.83% | +257.10% | 0.57 | -77.13% | Y | n |
+| WIDE20 | 5 | 126/21 | +69.00% | +70.83% | +257.10% | 0.53 | -76.54% | n | n |
+| NARROW8 | 5 | 126/21 | +250.96% | +104.12% | +257.11% | 0.81 | -61.79% | Y | n |
+| NARROW8 | 8 | 126/21 | +202.05% | +104.12% | +257.11% | 0.75 | -57.95% | Y | n |
+| NARROW8 | 3 | 126/21 | +189.88% | +104.12% | +257.11% | 0.72 | -60.95% | Y | n |
+| NARROW8 | 5 | 182/30 | +133.80% | +140.44% | +349.75% | 0.66 | -62.79% | n | n |
+| NARROW8 | 8 | 182/30 | +127.11% | +140.44% | +349.75% | 0.65 | -62.76% | n | n |
+| NARROW8 | 3 | 182/30 | +101.74% | +140.44% | +349.75% | 0.59 | -63.38% | n | n |
+
+**7/12 beat the equal-weight basket. 0/12 beat BTC-only.** Best config returns
++263.67% against BTC's +349.73%, with -57% drawdown (vs US equity rotation's
+-28.87%). **Verdict: not validated.** You would have taken a 57% drawdown to
+underperform simply holding BTC.
+
+Findings worth keeping:
+
+- A control substituting **random** selection for momentum ranking (12 seeds,
+  identical costs) shows the ranking does carry signal: momentum beats random
+  by +164.9pp (top_n=8), +69.6pp (top_n=5), +55.8pp (top_n=3). The ranking
+  works; it just doesn't beat BTC.
+- **Concentration hurt.** top_n=8 of 20 beat top_n=3 on return, Sharpe and
+  drawdown simultaneously. This contradicts the prior reasoning in this file
+  that a 5-of-8 universe was "too unselective to separate anything."
+- The equal-weight-basket benchmark is soft in a market with one dominant
+  asset. The validated US equity rotation result (+149.56%) was measured
+  against the same kind of basket benchmark, not SPY — worth remembering
+  before treating it as settled.
+
+---
+
+## Per-coin strategy × cap-tier study (2026-09-21)
+
+Ran every repo strategy against individual coins bucketed by cap tier, rather
+than portfolio-level. Buckets by 90-day average quote volume (**a liquidity
+proxy for market cap — no CoinGecko access; recorded as a proxy**), each coin
+requiring ≥400 daily bars. 192 of 198 cells ran.
+
+| Strategy | LARGE (WR / PF) | MID | SMALL |
+|---|---|---|---|
+| Donchian_55_20_turtle | 51.4% / 2.23 | 44.9% / 1.88 | 39.6% / 1.40 |
+| Donchian_20_10_trend100 | 50.0% / 2.31 | 43.2% / 1.66 | 35.8% / 1.54 |
+| Donchian_20_10_base | 47.0% / 2.11 | 41.2% / 1.56 | 37.0% / 1.47 |
+| Trend_Following_SMA | 26.0% / 1.30 | 28.5% / 2.05 | 21.0% / 1.18 |
+| Mean_Reversion_RSI | 40.2% / **0.74** | 29.8% / **0.67** | 33.5% / **0.72** |
+| MA_Cross_12_26 | 39.9% / 1.58 | 37.3% / 1.40 | 37.8% / 1.68 |
+
+**Donchian is a large-cap strategy.** Every variant degrades monotonically
+LARGE → MID → SMALL on both win rate and profit factor. On LARGE it posts
+47–51% WR at PF 2.1–2.3 with the shallowest drawdowns (-10 to -12%) — the best
+risk-adjusted numbers in the grid. Validated-count says 1/10 there only
+because LARGE's median buy-and-hold is **+730%**; nothing part-invested beats
+that.
+
+**Validated-count is anti-correlated with bucket quality** and should not be
+used as the primary metric. It rewards strategies on falling assets. Win rate
+and profit factor are the trustworthy columns.
+
+**MA_Cross's apparent 8/10 on SMALL is an artifact**, not an edge. 8/10 SMALL
+coins had negative buy-and-hold (median -21.4%). The "wins" are near-zero
+absolute returns clearing a collapsed benchmark: ARB +3.9% vs bench -72.3%,
+AAVE +3.2% vs -70.2%, TAO +1.7% vs -42.7%. It *fails* on the one SMALL coin
+that rose (FET +47.9% vs +225.1%). TUT's PF 5.50 is 6 trades.
+
+**New-listings bucket could not be evaluated.** Only **3 coins** on all of
+Binance listed within ~7 days (scanned top 500 by volume), not 10. On hourly
+bars: BNCBUSDT (174 bars) — all 6 strategies unusable (3 skipped on
+insufficient history, 3 errored indexing past the array). The other two
+produced 0–4 trades each. Not answerable with current strategies; there is
+also no survivorship history to backtest against by definition.
+
+---
+
+## Literature review + 11-strategy grid on widened small caps (2026-09-22)
+
+Researched 10 strategies with documented evidence on small-cap / illiquid /
+high-volatility assets, graded by evidence quality:
+
+**Strong evidence**: Time-series momentum (Moskowitz/Ooi/Pedersen 2012, 55
+futures, 1.27%/mo alpha; crypto replications ~31.96% annual, beating
+cross-sectional — caveat that later work attributes results to vol-scaling);
+Volatility-managed portfolios (Moreira & Muir, Sharpe +50–100%);
+**Short-term reversal (most on-point — 200 coins 2015–19, significant reversal
+at daily/weekly/monthly, explicitly strongest in small-cap illiquid coins)**;
+52-week-high proximity (George & Hwang 2004, *Journal of Finance*).
+
+**Contested**: low-volatility / idio-vol anomaly — recent work finds a
+post-2017 crypto low-vol premium, a 1000-coin 2013–19 study finds none.
+
+**Weak / flagged as folklore**: Donchian-Turtle (outside sources were
+blog/vendor-tier claiming "62.71% annualized"; our own backtest is better
+evidence than anything published), Keltner bands, Bollinger reversion and
+breakout (mixed; wider literature warns technical rules often die under
+White's Reality Check / SPA adjustment), RSI thresholds (no credible support).
+
+**Skipped, no data source**: funding-rate carry, order-book/microstructure,
+Amihud illiquidity, on-chain.
+
+Ran 11 strategies × 40 small-cap coins (adv90 $2.9–17.9M, ≥400 bars) = 440
+cells, all ran. Added primitives to `indicators.py`: `ema`, `rolling_std`,
+`realized_vol`, `bollinger`, `keltner`, `macd`.
+
+**Buy-and-hold was negative on 34/40 coins, median -59.0%** — this bucket is a
+graveyard, so "beat benchmark" is near-meaningless here.
+
+Results (mean PF as originally reported — **see the correction below, these
+mean figures are misleading**):
+
+| Strategy | n | WR | PF | avgRet | medRet | PF·rose | PF·fell |
+|---|---|---|---|---|---|---|---|
+| Bollinger_Rev_20_2 | 38 | 61.6% | 1.94 | +3.8% | +2.0% | 1.58 | 2.01 |
+| 52wHigh_5pct | 13 | 40.5% | 2.11 | +2.5% | +0.0% | 2.38 | 1.94 |
+| Keltner_Brk_20_2 | 37 | 35.3% | 1.70 | +9.4% | +4.6% | 2.12 | 1.62 |
+| Bollinger_Brk_20_2 | 40 | 33.6% | 1.58 | +10.8% | +4.4% | 1.51 | 1.59 |
+| Donchian_55_20_turtle | 29 | 39.7% | 1.58 | +9.0% | +5.2% | **2.79** | **1.27** |
+| TSMOM_VolMgd_90 | 34 | 31.5% | 1.49 | +1.0% | +0.3% | 3.74 | 1.01 |
+| TSMOM_90 | 38 | 31.9% | 1.32 | +5.5% | +3.9% | 2.17 | 1.17 |
+| LowVol_60 | 39 | 19.5% | 1.28 | +2.0% | +1.6% | 1.48 | 1.24 |
+| STReversal_7d | 30 | 42.5% | 1.26 | +8.0% | +5.5% | 1.90 | 1.14 |
+| MACD_12_26_9 | 40 | 32.8% | 1.06 | +3.4% | **-0.3%** | 1.33 | 1.01 |
+| RSI_Recover_trend200 | 24 | 46.5% | **0.65** | -4.9% | -5.5% | 0.77 | 0.62 |
+
+Confirmed nulls:
+
+- **RSI loses money.** PF 0.65, only **4/24 coins profitable**, -4.9% avg.
+  Adding an SMA200 trend filter did NOT rescue it. This settles the open
+  question in this file: the weak RSI result is the **signal**, not a missing
+  filter. `MeanReversionStrategy` should be retired.
+- **MACD is a coin flip.** PF 1.06, median return **-0.3%**, 2067 trades,
+  20/40 profitable. A true EMA-MACD did no better than the SMA approximation.
+- **Low-vol anomaly: null here.** PF 1.28 but 19.5% WR, 21/39 profitable.
+- **Donchian's edge does not transfer down-cap** — PF 2.79 on risers vs 1.27
+  on fallers, the strongest crash-dependence in the table. Consistent with the
+  cap-tier study above.
+- Vol-managed TSMOM cut drawdown (-11.3% → -8.2%) and raised PF (1.32 → 1.49)
+  but halved returns and only 17/34 profitable. Directionally consistent with
+  Moreira-Muir; too little exposure to be useful standalone.
+- Short-term reversal underperformed its literature (PF 1.26, worst drawdown
+  at -21.7%), but my fixed per-coin threshold is not a fair test of a
+  cross-sectional ranking effect. Unresolved, not disproven.
+
+---
+
+## METHODOLOGY CORRECTION: mean-of-PF is misleading (2026-09-22)
+
+The Bollinger "PF 1.94" headline above was **wrong as a summary statistic**.
+Profit factor is a ratio; averaging it across coins lets a few low-trade-count
+outliers dominate. For Bollinger 20/2.0: mean PF 4.13 but **median PF 1.40**,
+max 58.1 on ~10 trades.
+
+**Standing rule from now on**: report **median PF**, **profitable-coin count**,
+and enforce a **minimum trade floor (≥15)** per cell. Mean PF may be shown
+alongside but never as the headline. Validated-count stays deprecated per the
+cap-tier entry above.
+
+---
+
+## Bollinger reversion put through a full gauntlet: KILLED (2026-09-22/23)
+
+Bollinger reversion was the one candidate from the small-cap grid that looked
+real, on the strength of being the only strategy with PF higher on coins that
+*fell* than on coins that rose. Tested properly, it does not survive.
+
+**(a) Parameter sweep — narrow spike, not a plateau.** Mean PF across a 6×4
+grid (period × std-mult):
+
+| period | std 1.5 | std 2.0 | std 2.5 | std 3.0 |
+|---|---|---|---|---|
+| 10 | 1.09 | 1.30 | 1.98 | — (0 coins) |
+| 15 | 0.97 | 1.24 | 2.19 | 2.98 |
+| **20** | 0.97 | **1.94** | 1.36 | 1.19 |
+| 30 | 0.92 | 1.45 | 2.31 | 3.88 |
+| 40 | 0.98 | 0.99 | 1.08 | 2.33 |
+| 50 | 1.20 | 1.15 | 1.13 | 2.89 |
+
+20/2.0 is an isolated spike — one grid step in any direction roughly halves or
+kills it. Grid median PF **1.17**; 6/24 cells below 1.0. The higher-PF cells
+(30/3.0, 15/3.0) have only 15 and 3 coins reaching 5 trades: wide bands fire
+rarely, so the high-PF region is where the sample vanishes.
+
+**(b) Out-of-sample across two non-overlapping windows** — W1 2022-04→2024-04
+(LUNA/FTX era), W2 2024-05→2026-09. At 20/2.0, W1 loses money at the median
+(-0.9%), only 10/21 coins profitable. Per-coin persistence is chance: of coins
+present in both windows, **return sign agrees on only 11/21**.
+
+**(c) The fell>rose property inverts.** In W1, PF is **0.63 on fallers vs 7.77
+on risers** — below 1, i.e. losing money on exactly the coins the property
+claimed it handled. Same inversion at 20/1.5 (0.64 vs 3.05) and 30/2.0 (0.79
+vs 4.82). The original fell>rose signal was an artifact of W2 dominating the
+full-window aggregate (35/38 coins fell there). Buying dips works when the
+asset later recovers; in W1 it caught falling knives.
+
+**Implementation was audited and is correct** — band math matches manual
+computation, `rolling_std` is sample std, no look-ahead (bands on a truncated
+series are bit-identical), no off-by-one (entry bars match the manual rule).
+The instability is not a bug.
+
+**Corrected stats confirm** (median PF, ≥15 trade floor): FULL-window median PF
+**1.02–1.18** across stop settings, roughly half the coins profitable. Note W1
+has **zero** coins reaching 15 trades (median 8, max 13) — that window was
+underpowered from the start.
+
+**Verdict: the kill stands. Not an edge.**
+
+---
+
+## REAL BUG: `atr_stop_multiple = 3.5` is miscalibrated for crypto
+
+Found while auditing Bollinger. The setting is inherited from equity tuning.
+Against crypto ATR it places the stop a **median 26.2% below entry** across the
+small-cap set (range 21–36%: LTC 21.3%, AAVE 27.3%, FET 35.5%, PENGU 35.5%).
+A 26% stop is functionally inactive — positions run essentially unprotected.
+
+Tightening it materially changes results in the falling-knife regime. Bollinger
+20/2.0 on W1, ≥5 trade floor:
+
+| atr_mult | n | med PF | profitable | med Ret |
+|---|---|---|---|---|
+| 1.0 | 22 | 0.87 | 8/22 | -1.0% |
+| **1.5** | 22 | **1.37** | **12/22** | **+1.6%** |
+| 2.0 | 21 | 1.22 | 12/21 | +1.4% |
+| 3.5 (current default) | 21 | 1.10 | 10/21 | -0.9% |
+
+A 1.5× stop flips W1 from -0.9% to +1.6% median. **Risk management mattered
+more than the signal.** (It still doesn't save Bollinger — PF on fallers gets
+*worse* with tighter stops, 0.53 → 0.37, because tighter stops exit losers
+sooner rather than making dip-buying work.)
+
+**This affects every strategy in the codebase, including the deployed
+`CryptoTradingBot` Donchian config**, not just Bollinger. Nothing has been
+changed — this needs a deliberate sweep of `atr_stop_multiple` on crypto before
+any value is picked. Flagging as the most actionable finding of this session.
+
+---
+
+## Open / not done
+
+1. **Donchian gauntlet on large caps is INCOMPLETE** — 180/720 cells cached.
+   Param sweep (5 entry/exit pairs × 3 trend filters × 3 windows × 16 coins) to
+   subject the incumbent to the same test that killed Bollinger. Not graded
+   easier for being deployed; verdict pending.
+2. **The large-cap tier cannot be widened to 30–40 coins.** Only **16** clear
+   both large-cap liquidity and ≥400 bars (adv90 $21.9M–$1,100M). Binance
+   liquidity is severely top-heavy — eligible pool median adv90 is $3.9M, p75
+   $16.0M. A 30–40 coin "large cap" set would reach into mid-cap and stop being
+   a large-cap test. MID set built at 32 coins (ranks 16–48, $3.6–21.2M).
+3. **Commodities not checked.** Reachability of `GC=F`, `CL=F`, `SI=F`, `NG=F`,
+   `GLD`, `USO` via the yfinance `DataFetcher` is untested. No integration to be
+   built without asking first. Caveat to carry in: `=F` tickers are
+   back-adjusted **continuation series** whose contract-roll splices create
+   artificial gaps that breakout strategies read as real range expansions —
+   Donchian especially. ETFs (`GLD`, `USO`, `SLV`, `UNG`) are the cleaner
+   primary; treat `=F` as cross-check and flag the roll artifact.
+4. **`atr_stop_multiple` sweep** — see the bug section above.
+5. Carried over, still open: Neon `DATABASE_URL` password was pasted in plain
+   text in chat during setup and should be rotated; `crypto-cycle.yml` fallback
+   host unverified against a real Actions run; two-consecutive-runs state
+   continuity never explicitly demonstrated; stops-only cycle method not added
+   to `crypto_orchestrator.py`.
+
+## Survivorship bias (applies to every crypto result in this session)
+
+All buckets are built from **today's** liquidity rankings applied over
+historical windows. Coins that were liquid earlier and died are absent
+entirely (MATIC delisted 2024-09, FTM 2025-01, and many below them). The
+small-cap set is specifically the "fell ~59% but didn't die" cohort — precisely
+the regime that flatters mean-reversion strategies, since a coin that reverts
+is a coin that didn't go to zero. True figures on a delisting-inclusive
+universe would be lower, possibly materially.
+
+Additionally: 11 strategies × 40 coins on one window is ~11 shots at the
+target. A PF near 2.0 on a hand-picked config is within what data-snooping
+produces by chance — which is what White's Reality Check exists to correct for.
+**Nothing in this session is cross-validated across time periods except the
+Bollinger test, which failed.**
+
+## Uncommitted sandbox code (NOT in the repo)
+
+All of the following exist only in a sandbox working copy. Nothing was
+committed or pushed. Re-create or discard deliberately:
+
+- `config.py`: added `crypto_rotation_pairs` (20 pairs). Live `crypto_pairs`
+  deliberately left untouched so deployed behavior did not shift.
+- `rotation_backtest.py`: `build_price_matrix` made fetcher-agnostic via
+  `fetch_kwargs` (BinanceFetcher has no `india` kwarg, so the old signature
+  would TypeError); `run_rotation_backtest` gained `top_n` / `lookback_days` /
+  `rebalance_days` / `periods_per_year` / `btc_symbol`; Sharpe annualization
+  made configurable (365 for crypto, 252 default for equities); BTC-only
+  benchmark added alongside the equal-weight basket.
+- `momentum_rotation.py`: `select_top_momentum` accepts a `top_n` override.
+- `run_rotation_backtest.py`: `crypto` universe wired to `BinanceFetcher` +
+  `crypto_capital`.
+- `indicators.py`: added `ema`, `rolling_std`, `realized_vol`, `bollinger`,
+  `keltner`, `macd`.
+- `strategy/ma_crossover.py`, `strategy/research_strats.py`: new strategy
+  classes (TSMOM, vol-managed TSMOM, 52w high, Bollinger rev/breakout,
+  Keltner, MACD, short-term reversal, low-vol, RSI+trend).
+- `tests/test_rotation_backtest.py`: 3 new mocked tests (no network), 7/7 pass.
