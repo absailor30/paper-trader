@@ -24,7 +24,21 @@ class PortfolioState(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
-_engine = create_engine(settings.database_url)
+def _with_psycopg2_driver(url: str) -> str:
+    # SQLAlchemy 2.1+ defaults bare postgresql:// URLs to the psycopg (v3)
+    # dialect, not psycopg2 -- but this project only installs
+    # psycopg2-binary, so an unpinned SQLAlchemy upgrade broke every
+    # Postgres-backed job with "ModuleNotFoundError: No module named
+    # 'psycopg'" (first seen 2026-09-24, stocks-intraday-stops.yml). Pin
+    # the driver in the URL itself so this can't silently break again.
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg2://", 1)
+    return url
+
+
+_engine = create_engine(_with_psycopg2_driver(settings.database_url))
 Base.metadata.create_all(_engine)
 _Session = sessionmaker(bind=_engine)
 
