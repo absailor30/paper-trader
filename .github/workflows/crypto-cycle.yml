@@ -1,0 +1,37 @@
+name: Crypto trading cycle
+
+# Scheduled, stateless job (see CHECKPOINT.md, "Next: make the crypto loop
+# run independent of any laptop"): each run is a fresh throwaway VM, no
+# state persists on disk between runs — state lives only in Postgres via
+# DATABASE_URL, so this is config, not a long-running process.
+
+on:
+  schedule:
+    # Daily, 00:10 UTC — after the daily bar closes, matches the
+    # strategy's 24h cadence (run.py crypto --interval-hours 24 is not
+    # used here; each scheduled run is one single cycle instead).
+    - cron: "10 0 * * *"
+  workflow_dispatch: {}
+    # Manual trigger from the Actions tab, for on-demand runs/testing.
+
+jobs:
+  run-cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run one crypto cycle
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AUTO_EXECUTE: ${{ vars.AUTO_EXECUTE || 'false' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python run.py crypto
