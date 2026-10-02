@@ -45,6 +45,15 @@ State of play, shortest honest version:
 - 2026-10-02 check: stocks-cycle (US+INDIA) and crypto-cycle both succeed and return `[]` (no signals). Crypto fetch works via the data-api.binance.vision fallback (primary 451s as expected). INDIA/US/CRYPTO empty = Donchian 55/20 breakout simply hasn't triggered; no fetch warnings or errors in logs. This is the strategy being selective (daily bars, ~55-day highs), not a bug. 
 - Breakout-distance report (2026-10-02, `breakout-distance.yml` manual workflow, real data): **INDIA** is blocked by the 100-day-SMA trend filter, not distance or price: all 15 symbols are below SMA100 (-3.7% to -17.4%); closest to the 20-day high are HDFCBANK 3.9%, AXISBANK 5.2%, ITC 5.9%. Only MARUTI (~114% of the Rs10k capital per share) is unaffordable. **US** (20d + SMA100): CAT 0.7% (but below SMA100), QQQ 0.9%, MSFT 1.4%, SPY 1.5%, NVDA 1.6% are nearest. **CRYPTO** (55d, no filter): BTC 1.2%, ETH 2.3%, SOL 2.6%, BNB 3.8%, ADA 4.1%; XRP 11%. Expect India to stay quiet until the market is above its 100-day averages; nothing is broken.
 
+## India strategy search: looser trend filter + alternatives (2026-10-02)
+
+Real data, 15 India symbols, 10y history (2016-09 to 2026-10), `scripts/india_strategy_search.py` via manual `india-strategy-search.yml`. Each variant scored in-sample (before last 3y) and out-of-sample (last 3y), Rs10k/symbol, 12% position, costs included. **No change made to the live strategy.**
+
+- **Looser trend filter does not help.** For 20/10 entries, tf20 is identical to no filter and tf50 is near-identical (a close above a 20-day high is almost always above its 20-day SMA), so loosening below 100 changes nothing. 20/10 OOS: none -0.42%, tf50 -0.19%, tf100 +0.08% (best of the family). The filter was not the problem; Donchian breakouts on India simply earned ~nothing in the last 3y (IS about +4%, OOS about 0%). 10/5 fast loses OOS (3/15 symbols profitable, -0.9% to -1.4%): dead. 55/20 is positive in both but tiny (OOS +0.39%, median PF 1.11, 115 trades).
+- **Best candidate: Momentum_126d_ret10_sma50** (enter when 126-day return >= 10% and close > SMA50; exit below SMA50 or ATR stop/target). IS +3.91% (13/15 profitable), OOS +1.08% (11/15 profitable, median PF 1.36, avg DD -2.3%, 209 trades, 33% WR). Other momentum variants positive but weaker (63d +0.59%, 126d/SMA100 +0.43%). RSI mean reversion ~flat (OOS +0.10%).
+- **Caveats (do not over-read):** 16 variants x 15 symbols, so best-of-N selection risk; the OOS window was used to rank, so it is no longer a clean holdout. Returns are tiny in absolute terms because each position is capped at 12% of Rs10k, and buy-and-hold (+9.5% OOS, +151% IS) is not comparable (strategies are mostly in cash). Survivorship bias: the universe is today's 15 large caps. Not verified: whether Momentum_126d_ret10_sma50 would fire today (India is below SMA100 everywhere, so a 126d >= +10% return plus price > SMA50 is unlikely right now).
+- **Next if pursued:** validate on a wider NSE universe and walk-forward before touching `orchestrator.py`; a propose-only run alongside the live Donchian is the low-risk way to see it live.
+
 ## Dashboard moved to GitHub Pages; circuit-breaker Telegram alert added (2026-09-22)
 
 (From the dashboard/notifications session, running in parallel with the
@@ -199,6 +208,9 @@ headline metric is weaker evidence than a [NEW] row's.
 | **Donchian (all variants)** | **Crypto LARGE cap** | **47-51% WR, PF 2.1-2.3, DD -10 to -12%** | **[NEW]** | **BEST SURVIVING CANDIDATE — gauntlet incomplete** |
 | Donchian (all variants) | Crypto MID cap | 41-45% WR, PF 1.56-1.88 | [NEW] | Degrades from large |
 | Donchian (all variants) | Crypto SMALL cap | 36-40% WR, PF 1.40-1.54; PF 2.79 risers vs 1.27 fallers | [NEW] | Edge does NOT transfer down-cap |
+| Donchian 20/10 (tf none/20/50/100) | India, 15 sym, 10y | IS ret ~+4% med PF 1.6; OOS (last 3y) -0.42% to +0.08%, med PF 1.05-1.25 | [NEW] | Edge faded OOS; looser trend filters are identical to none, no help |
+| Donchian 10/5 | India, 15 sym, 10y | OOS 3-4/15 profitable, -0.9% to -1.4% | [NEW] | DEAD on India |
+| Momentum 126d>=10% + SMA50 | India, 15 sym, 10y | IS +3.91% 13/15; OOS +1.08% 11/15, med PF 1.36, DD -2.3%, 209 trades | [NEW] | Best India candidate; tiny, best-of-16 risk, OOS not clean. Not deployed |
 | Trend Following (SMA 50/200) | US+India+commodities | 3/42 val, 26.3% WR, PF 1.47 | [OLD] | Weakest of the equity three |
 | Trend Following (SMA 50/200) | Crypto, all tiers | 21-28% WR, PF 1.18-2.05 | [NEW] | Weak everywhere; whipsaws in 24/7 markets |
 | **Mean Reversion (RSI)** | US+India+commodities | 0/42 val, 52.9% WR, PF 1.72 | [OLD] | — |
