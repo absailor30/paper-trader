@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from paper_trader.config import settings
-from paper_trader.notify import notify_circuit_breaker, notify_fetch_failure, notify_order, send_telegram_message
+from paper_trader.notify import notify_circuit_breaker, notify_fetch_failure, notify_order, notify_shadow, send_telegram_message
 
 
 def test_send_telegram_message_noop_when_unconfigured(monkeypatch):
@@ -78,3 +78,10 @@ def test_notify_fetch_failure_silent_when_some_data_received():
     with patch("paper_trader.notify.send_telegram_message") as mock_send:
         notify_fetch_failure("CRYPTO", 8, 3)
     mock_send.assert_not_called()
+
+
+def test_notify_shadow_says_not_executed():
+    with patch("paper_trader.notify.send_telegram_message") as mock_send:
+        notify_shadow("Momentum_126d_ret10_sma50", "BUY", "TCS", 2075.0, "126d return 12%")
+    text = mock_send.call_args[0][0]
+    assert "SHADOW BUY" in text and "TCS" in text and "NOT executed" in text

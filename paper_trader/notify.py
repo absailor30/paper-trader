@@ -59,6 +59,14 @@ def notify_circuit_breaker(market: str, reason: str) -> None:
     send_telegram_message(f"\U0001F6D1 <b>{market} circuit breaker</b>\n{reason} -- new entries blocked this cycle.")
 
 
+def notify_shadow(strategy: str, side: str, symbol: str, price: float, detail: str) -> None:
+    """Hypothetical entry/exit from a propose-only shadow strategy -- nothing was executed."""
+    send_telegram_message(
+        f"\U0001F47B <b>SHADOW {side}</b> {symbol} @ {price:,.2f}\n"
+        f"{strategy} -- NOT executed (propose-only)\n{detail}"
+    )
+
+
 def notify_fetch_failure(market: str, requested: int, received: int) -> None:
     """Call when a fetch cycle comes back with far less data than
     requested -- e.g. every symbol 451ing/404ing silently, the exact

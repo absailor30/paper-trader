@@ -11,7 +11,6 @@ import statistics
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timedelta
-from typing import Optional
 
 import pandas as pd
 from loguru import logger
@@ -19,52 +18,13 @@ from loguru import logger
 from paper_trader.backtest.engine import run_backtest
 from paper_trader.config import settings
 from paper_trader.data.fetcher import DataFetcher
-from paper_trader.strategy.base import Position, Signal, SignalType, Strategy
 from paper_trader.strategy.donchian_breakout import DonchianBreakoutStrategy
-from paper_trader.strategy.indicators import atr, sma
 from paper_trader.strategy.mean_reversion import MeanReversionStrategy
+from paper_trader.strategy.momentum_trend import MomentumTrend
 
 CAPITAL = 10_000.0
 OOS_YEARS = 3
 MIN_BARS = max(settings.slow_sma, settings.atr_period) + 2
-
-
-class MomentumTrend(Strategy):
-    """Time-series momentum: own it while its lookback return is strong and price is above a short SMA."""
-
-    def __init__(self, lookback: int, min_ret: float, sma_n: int):
-        self.lookback, self.min_ret, self.sma_n = lookback, min_ret, sma_n
-        self.name = f"Momentum_{lookback}d_ret{int(min_ret * 100)}_sma{sma_n}"
-
-    def generate_signal(self, data: pd.DataFrame) -> Optional[Signal]:
-        if len(data) < max(self.lookback, self.sma_n, settings.atr_period) + 2:
-            return None
-        close = data["close"]
-        price = close.iloc[-1]
-        ret = price / close.iloc[-1 - self.lookback] - 1
-        trend = sma(close, self.sma_n).iloc[-1]
-        atr_now = atr(data["high"], data["low"], close, settings.atr_period).iloc[-1]
-        if pd.isna(trend) or pd.isna(atr_now) or ret < self.min_ret or price <= trend:
-            return None
-        stop = price - settings.atr_stop_multiple * atr_now
-        if stop <= 0 or stop >= price:
-            return None
-        symbol = data["symbol"].iloc[-1] if "symbol" in data.columns else "UNKNOWN"
-        return Signal(
-            symbol=symbol, signal_type=SignalType.BUY, price=float(price), timestamp=data.index[-1],
-            strategy_name=self.name, stop_loss=float(stop),
-            take_profit=float(price + settings.min_risk_reward * (price - stop)),
-            reasoning=f"{self.lookback}d return {ret:.1%}, above SMA{self.sma_n}",
-        )
-
-    def should_exit(self, position: Position, data: pd.DataFrame) -> bool:
-        price = position.current_price
-        if position.stop_loss and price <= position.stop_loss:
-            return True
-        if position.take_profit and price >= position.take_profit:
-            return True
-        trend = sma(data["close"], self.sma_n).iloc[-1]
-        return bool(not pd.isna(trend) and data["close"].iloc[-1] < trend)
 
 
 def build_variants() -> dict:

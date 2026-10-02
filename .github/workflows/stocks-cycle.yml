@@ -61,3 +61,15 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python run.py retry-entry --market "${{ inputs.retry_market }}" --symbol "${{ inputs.retry_symbol }}"
+
+      # Propose-only shadow of the India momentum candidate (see
+      # paper_trader/shadow.py). Never executes and never touches the live
+      # portfolio; continue-on-error so it can never fail the live cycle.
+      - name: Shadow India momentum (propose-only)
+        if: ${{ !inputs.retry_symbol }}
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python run.py shadow-india
