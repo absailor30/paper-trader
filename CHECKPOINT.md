@@ -39,6 +39,11 @@ State of play, shortest honest version:
    actual numbers, not a chat narration; nothing is promoted to live without
    an explicit ask and a real-data result behind it.
 
+## Fix: SQLAlchemy 2.1 broke Postgres driver (2026-09-24) + why no trades (2026-10-02)
+
+- `stocks-intraday-stops.yml` failed with `ModuleNotFoundError: No module named 'psycopg'`. Cause: requirements.txt leaves `sqlalchemy>=2.0.0` unpinned; 2.1.0 changed the default driver for bare `postgresql://` URLs to psycopg v3, but only `psycopg2-binary` is installed. Fix: `_with_psycopg2_driver()` in `paper_trader/persistence/state_store.py` forces `postgresql+psycopg2://`. 4 tests in `tests/test_state_store.py`; 126/126 pass; confirmed on a live Actions run (run 36068192574). Lesson: unpinned deps can break prod silently; only the intraday-stops job happened to run during the window.
+- 2026-10-02 check: stocks-cycle (US+INDIA) and crypto-cycle both succeed and return `[]` (no signals). Crypto fetch works via the data-api.binance.vision fallback (primary 451s as expected). INDIA/US/CRYPTO empty = Donchian 55/20 breakout simply hasn't triggered; no fetch warnings or errors in logs. This is the strategy being selective (daily bars, ~55-day highs), not a bug. Not yet verified: how close each symbol is to its breakout level.
+
 ## Dashboard moved to GitHub Pages; circuit-breaker Telegram alert added (2026-09-22)
 
 (From the dashboard/notifications session, running in parallel with the
