@@ -37,9 +37,10 @@ def _breakout_data():
     return _make_ohlcv(close, "AAPL")
 
 
-def test_uses_donchian_strategy_not_trend_following():
+def test_us_uses_donchian_and_india_uses_momentum():
     bot = TradingBot()
-    assert bot.strategy.name.startswith("Donchian")
+    assert bot.strategies["US"].name.startswith("Donchian")
+    assert bot.strategies["INDIA"].name == "Momentum_126d_ret10_sma50"
 
 
 def test_propose_only_by_default(monkeypatch):
@@ -323,16 +324,16 @@ class TestRetryEntry:
         bot = TradingBot()
         trader = bot.traders["US"]
         today = datetime.now().strftime("%Y-%m-%d")
-        first_retry_id = f"AAPL:{bot.strategy.name}:{today}:BUY:RETRY1"
+        first_retry_id = f"AAPL:{bot.strategies['US'].name}:{today}:BUY:RETRY1"
         # Simulate a first retry that was itself rejected (e.g. before a
         # follow-up bug fix landed).
-        trader.place_order(first_retry_id, "AAPL", "BUY", 999_999.0, 100.0, bot.strategy.name)
+        trader.place_order(first_retry_id, "AAPL", "BUY", 999_999.0, 100.0, bot.strategies["US"].name)
         assert trader._order_results[first_retry_id]["status"] == "REJECTED"
 
         monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
         result = bot.retry_entry("US", "AAPL")
 
-        assert result["client_order_id"] == f"AAPL:{bot.strategy.name}:{today}:BUY:RETRY2"
+        assert result["client_order_id"] == f"AAPL:{bot.strategies['US'].name}:{today}:BUY:RETRY2"
         assert result["action"] == "EXECUTED"
         assert trader._order_results[first_retry_id]["status"] == "REJECTED"  # untouched
 
@@ -341,9 +342,9 @@ class TestRetryEntry:
         bot = TradingBot()
         trader = bot.traders["US"]
         today = datetime.now().strftime("%Y-%m-%d")
-        original_id = f"AAPL:{bot.strategy.name}:{today}:BUY"
+        original_id = f"AAPL:{bot.strategies['US'].name}:{today}:BUY"
         # Simulate the original same-day rejection (e.g. from the sizing bug).
-        trader.place_order(original_id, "AAPL", "BUY", 999_999.0, 100.0, bot.strategy.name)
+        trader.place_order(original_id, "AAPL", "BUY", 999_999.0, 100.0, bot.strategies["US"].name)
         assert trader._order_results[original_id]["status"] == "REJECTED"
 
         monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"AAPL": _breakout_data()})
@@ -447,3 +448,17 @@ class TestMarkToMarketAndStatus:
         status = bot.get_status("US")
         assert status["positions"] == []
         assert status["num_positions"] == 0
+
+
+def test_india_cycle_executes_via_momentum_strategy(monkeypatch):
+    monkeypatch.setattr(settings, "auto_execute", True)
+    bot = TradingBot()
+    rising = _make_ohlcv(np.linspace(100, 160, 260), "RELIANCE")
+    monkeypatch.setattr(bot.fetcher, "fetch_many", lambda symbols, start_date, india=False: {"RELIANCE": rising})
+
+    actions = bot.run_market_cycle("INDIA")
+
+    assert [a["action"] for a in actions] == ["EXECUTED"]
+    position = bot.traders["INDIA"].portfolio.positions["RELIANCE"]
+    assert position["strategy"] == "Momentum_126d_ret10_sma50"
+    assert position["quantity"] == int(position["quantity"])  # India: whole shares only

@@ -241,3 +241,10 @@ class TestMarkToMarketAndStatus:
 
         assert status["market"] == "CRYPTO"
         assert status["positions"][0]["unrealized_pnl_pct"] == pytest.approx(100.0)
+
+
+def test_crypto_uses_donchian_20_10_no_trend_filter():
+    bot = CryptoTradingBot()
+    assert (bot.strategy.entry_period, bot.strategy.exit_period) == (20, 10)
+    assert bot.strategy.trend_filter_period is None
+    assert bot.strategy.name == "Donchian_Crypto_20_10"

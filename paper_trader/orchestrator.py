@@ -20,6 +20,7 @@ from paper_trader.execution.paper_trader import PaperTrader
 from paper_trader.notify import notify_circuit_breaker, notify_fetch_failure, notify_order
 from paper_trader.strategy.base import Position
 from paper_trader.strategy.donchian_breakout import DonchianBreakoutStrategy
+from paper_trader.strategy.momentum_trend import MomentumTrend
 
 MARKETS = {
     "US": {"symbols": settings.us_stocks, "capital": settings.us_capital, "india": False},
@@ -40,11 +41,17 @@ def _floor4(shares: float) -> float:
 class TradingBot:
     def __init__(self):
         self.fetcher = DataFetcher()
-        # Donchian + 100d trend filter is the proven strategy across US,
-        # India and commodities (see CHECKPOINT.md "Strategy scoreboard"
-        # and "Donchian iteration") -- Trend Following, used here before,
-        # was the weakest of the three on every axis.
-        self.strategy = DonchianBreakoutStrategy(trend_filter_period=100)
+        # Per-market strategy. US: Donchian + 100d trend filter (see
+        # CHECKPOINT.md "Strategy scoreboard"). INDIA: time-series momentum
+        # (126d return >= 10% and close > SMA50), promoted from propose-only
+        # shadow on 2026-10-03 after the India search (CHECKPOINT.md "India
+        # strategy search"): Donchian earned ~0% on India in the last 3y
+        # while momentum was positive in and out of sample. Thin evidence
+        # (best of 16 variants, OOS not a clean holdout) -- watch it.
+        self.strategies = {
+            "US": DonchianBreakoutStrategy(trend_filter_period=100),
+            "INDIA": MomentumTrend(126, 0.10, 50),
+        }
         self.traders = {
             market: PaperTrader(
                 initial_capital=cfg["capital"],
@@ -130,6 +137,7 @@ class TradingBot:
     def run_market_cycle(self, market: str) -> List[dict]:
         cfg = MARKETS[market]
         trader = self.traders[market]
+        strategy = self.strategies[market]
         today = datetime.now().strftime("%Y-%m-%d")
         actions: List[dict] = []
 
@@ -170,12 +178,12 @@ class TradingBot:
                 stop_loss=position.get("stop_loss"),
                 take_profit=position.get("take_profit"),
             )
-            if self.strategy.should_exit(pos_obj, df):
-                client_order_id = f"{symbol}:{self.strategy.name}:{today}:SELL"
+            if strategy.should_exit(pos_obj, df):
+                client_order_id = f"{symbol}:{strategy.name}:{today}:SELL"
                 if settings.auto_execute:
                     order = trader.place_order(
                         client_order_id, symbol, "SELL", position["quantity"], price,
-                        self.strategy.name, reasoning="should_exit triggered",
+                        strategy.name, reasoning="should_exit triggered",
                     )
                     notify_order(market, order)
                     actions.append({"action": "EXECUTED", **order})
@@ -194,7 +202,7 @@ class TradingBot:
             if not self.check_risk_limits(market):
                 break
 
-            signal = self.strategy.generate_signal(df)
+            signal = strategy.generate_signal(df)
             if signal is None:
                 continue
 
@@ -202,10 +210,10 @@ class TradingBot:
             if qty <= 0:
                 continue
 
-            client_order_id = f"{symbol}:{self.strategy.name}:{today}:BUY"
+            client_order_id = f"{symbol}:{strategy.name}:{today}:BUY"
             if settings.auto_execute:
                 order = trader.place_order(
-                    client_order_id, symbol, "BUY", qty, signal.price, self.strategy.name,
+                    client_order_id, symbol, "BUY", qty, signal.price, strategy.name,
                     stop_loss=signal.stop_loss, take_profit=signal.take_profit, reasoning=signal.reasoning,
                 )
                 notify_order(market, order)
@@ -242,6 +250,7 @@ class TradingBot:
         """
         cfg = MARKETS[market]
         trader = self.traders[market]
+        strategy = self.strategies[market]
         today = datetime.now().strftime("%Y-%m-%d")
 
         if symbol in trader.portfolio.positions:
@@ -256,7 +265,7 @@ class TradingBot:
         if df is None or df.empty:
             return {"action": "SKIPPED", "reason": "no data"}
 
-        signal = self.strategy.generate_signal(df)
+        signal = strategy.generate_signal(df)
         if signal is None:
             return {"action": "SKIPPED", "reason": "no signal"}
 
@@ -264,14 +273,14 @@ class TradingBot:
         if qty <= 0:
             return {"action": "SKIPPED", "reason": "position size is 0"}
 
-        base = f"{symbol}:{self.strategy.name}:{today}:BUY"
+        base = f"{symbol}:{strategy.name}:{today}:BUY"
         attempt = 1
         while f"{base}:RETRY{attempt}" in trader._order_results:
             attempt += 1
         client_order_id = f"{base}:RETRY{attempt}"
         if settings.auto_execute:
             order = trader.place_order(
-                client_order_id, symbol, "BUY", qty, signal.price, self.strategy.name,
+                client_order_id, symbol, "BUY", qty, signal.price, strategy.name,
                 stop_loss=signal.stop_loss, take_profit=signal.take_profit, reasoning=signal.reasoning,
             )
             notify_order(market, order)
@@ -308,6 +317,7 @@ class TradingBot:
         """
         cfg = MARKETS[market]
         trader = self.traders[market]
+        strategy = self.strategies[market]
         today = datetime.now().strftime("%Y-%m-%d")
         actions: List[dict] = []
 
@@ -340,14 +350,14 @@ class TradingBot:
                 stop_loss=position.get("stop_loss"),
                 take_profit=position.get("take_profit"),
             )
-            if not self.strategy.check_stop_only(pos_obj, price):
+            if not strategy.check_stop_only(pos_obj, price):
                 continue
 
-            client_order_id = f"{symbol}:{self.strategy.name}:{today}:INTRADAY-SELL"
+            client_order_id = f"{symbol}:{strategy.name}:{today}:INTRADAY-SELL"
             if settings.auto_execute:
                 order = trader.place_order(
                     client_order_id, symbol, "SELL", position["quantity"], price,
-                    self.strategy.name, reasoning="check_stop_only triggered (intraday poll)",
+                    strategy.name, reasoning="check_stop_only triggered (intraday poll)",
                 )
                 notify_order(market, order)
                 actions.append({"action": "EXECUTED", **order})

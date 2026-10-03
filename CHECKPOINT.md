@@ -1,8 +1,34 @@
 # Project Checkpoint
 
-**Date**: 2026-09-23
-**Branch**: `rebuild/v2` (not merged to `main` — `main` still has the previous
-architecture live on Render, untouched by this branch)
+**Date**: 2026-10-03
+**Branch**: `rebuild/v2`, merged into `main` via PR #2 on 2026-10-03 (the old
+Render/Streamlit/n8n architecture that `main` held is gone from `main`; it is
+recoverable from `main`'s git history before that merge). `AUTO_EXECUTE=true`
+for stocks and crypto (paper money only, explicitly approved by the user).
+
+## LIVE STRATEGIES AS OF 2026-10-03 (read this first)
+
+User decision 2026-10-03: promote both backtested candidates from propose-only
+shadow to live paper execution.
+
+| Market | Live strategy | Was | Evidence |
+|---|---|---|---|
+| US | Donchian 20/10 + SMA100 (unchanged) | same | scoreboard rows |
+| INDIA | **Momentum 126d>=+10% and close>SMA50**, exit close<SMA50 or ATR stop/target (`paper_trader/strategy/momentum_trend.py`, `TradingBot.strategies["INDIA"]`) | Donchian 20/10 + SMA100 | India search 2026-10-02: IS +3.91% (13/15 symbols), OOS +1.08% (11/15), med PF 1.36; old India Donchian ~0% OOS |
+| CRYPTO | **Donchian 20/10, no filter**, name `Donchian_Crypto_20_10` (`CryptoTradingBot`) | Donchian 55/20 | Crypto search 2026-10-03: positive IS and OOS on 8/8 coins, ~1.8x trades of 55/20 |
+
+Honest caveats, unchanged from the searches: India momentum is best-of-16 on 15
+stocks with an OOS window that was used for ranking, and its returns are small;
+crypto 20/10 did NOT beat 55/20 in the backtest (OOS +10.1% vs +12.1%, PF 1.94
+vs 2.34), it trades more. Both are on paper money, so this is a live experiment,
+not a proven edge. Open positions opened under the old rules now exit under the
+new rules (India: close<SMA50 / stop; crypto: 10-day low / stop). The scheduled
+shadow steps were removed (they would duplicate the live strategies); the
+`shadow.py` code, `run.py shadow-india|shadow-crypto` and the manual
+`shadow-*.yml` workflows remain for testing future candidates. To roll back:
+revert the strategy lines in `orchestrator.py` (`self.strategies`) and
+`crypto_orchestrator.py` (`DonchianBreakoutStrategy(55, 20, ...)`), which
+changes nothing else.
 
 ## START HERE if you're a new session picking this up (2026-09-23 handoff)
 

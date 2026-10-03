@@ -1,14 +1,15 @@
 """
 Single entry point for one crypto trading cycle (Binance spot). Mirrors
 orchestrator.py's TradingBot but targets settings.crypto_pairs via
-BinanceFetcher instead of yfinance, and always runs the one strategy that
-has actually shown an edge on crypto data (see CHECKPOINT.md "Crypto
-Donchian sweep: Turtle config beats trend-filtered default"): classic
-Turtle-style Donchian breakout, 55-day entry / 20-day exit, no trend
-filter. A real Binance-data sweep of 5 Donchian variants across all 8
-crypto pairs found this variant validated on more symbols (5/8 vs 4/8)
-with a better average profit factor (1.76 vs 1.53) than the previously
-deployed 20/10 + 100-day-trend-filter config it replaced.
+BinanceFetcher instead of yfinance.
+
+Strategy: Donchian breakout, 20-day entry / 10-day exit, no trend filter,
+promoted from propose-only shadow on 2026-10-03 (replacing the earlier
+55/20 Turtle config). Real Binance backtest on 8 large-cap pairs
+(CHECKPOINT.md "Crypto strategy search"): every Donchian variant was
+positive in sample and in the last 3 years; 20/10 gave ~1.8x the trades of
+55/20 (166 vs 94 OOS) at a slightly lower profit factor (1.94 vs 2.34) and
+similar return (OOS +10.1% vs +12.1%) -- more signals, not more edge.
 
 Defaults to PROPOSE-ONLY: signals are generated, sized, and logged, but no
 order is placed, unless settings.auto_execute is explicitly true. Crypto
@@ -33,7 +34,7 @@ class CryptoTradingBot:
     def __init__(self):
         self.fetcher = BinanceFetcher(market="spot")
         self.strategy = DonchianBreakoutStrategy(
-            entry_period=55, exit_period=20, trend_filter_period=None, name="Donchian_Crypto_Turtle"
+            entry_period=20, exit_period=10, trend_filter_period=None, name="Donchian_Crypto_20_10"
         )
         self.trader = PaperTrader(
             initial_capital=settings.crypto_capital,
