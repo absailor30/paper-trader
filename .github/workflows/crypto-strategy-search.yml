@@ -1,0 +1,21 @@
+name: Crypto strategy search
+
+# Manual-only, read-only backtests (no DB access, no orders): looser-trend-filter
+# Donchian variants and alternative strategies on the large-cap crypto universe, scored
+# in-sample and out-of-sample.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run Crypto strategy search
+        run: PYTHONPATH=. python -u scripts/crypto_strategy_search.py

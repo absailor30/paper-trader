@@ -86,12 +86,12 @@ def fmt(s: dict) -> str:
             f"DD={s['avg_dd']:6.2f}% WR={s['wr']:5.1f}%")
 
 
-def evaluate() -> None:
+def evaluate(label: str = "INDIA") -> None:
     tasks = [(v, sym, per) for v in VARIANTS for (sym, per) in SLICES]
     with ProcessPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
         results = [r for r in pool.map(_run, tasks, chunksize=1) if r]
 
-    print(f"\n=== INDIA results: IS = before last {OOS_YEARS}y, OOS = last {OOS_YEARS}y; "
+    print(f"\n=== {label} results: IS = before last {OOS_YEARS}y, OOS = last {OOS_YEARS}y; "
           f"capital {CAPITAL:,.0f}/symbol, {settings.max_position_size:.0%} position ===")
     candidates = []
     for v in VARIANTS:
