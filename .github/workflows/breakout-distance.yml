@@ -1,0 +1,19 @@
+name: Breakout distance report
+
+# Manual-only, read-only: prints each symbol's distance to its Donchian
+# entry-channel high. No DB access, no orders.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Distance to breakout
+        run: PYTHONPATH=. python scripts/breakout_distance.py 2>&1 | grep -v "WARNING\|INFO"

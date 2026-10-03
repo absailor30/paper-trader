@@ -1,0 +1,63 @@
+name: Stocks trading cycle
+
+# Scheduled, stateless job, same pattern as crypto-cycle.yml (see
+# CHECKPOINT.md, "Next: make both the crypto and stock loops run
+# independent of any laptop"): each run is a fresh throwaway VM, no state
+# persists on disk between runs — state lives only in Postgres via
+# DATABASE_URL, so this is config, not a long-running process.
+#
+# Runs once after both US and India markets have closed for the day, so
+# the day's bar is final when TradingBot fetches it (unlike crypto, which
+# trades 24/7 and can run on any fixed clock time).
+
+on:
+  schedule:
+    # 21:30 UTC = after US market close (20:00 UTC / 4pm ET) and well
+    # after India's close (10:00 UTC / 3:30pm IST) on the same calendar day.
+    - cron: "30 21 * * 1-5"
+  workflow_dispatch:
+    # Manual trigger from the Actions tab, for on-demand runs/testing.
+    # Leave both inputs blank for a normal full cycle. Fill both in to
+    # instead retry one symbol's same-day-REJECTED BUY (see
+    # orchestrator.py's retry_entry() docstring for why a normal cycle
+    # re-run can't do this itself -- client_order_id dedup returns the
+    # cached rejection instead of re-executing).
+    inputs:
+      retry_market:
+        description: "Retry mode: market (US or INDIA). Leave blank for a normal cycle."
+        required: false
+      retry_symbol:
+        description: "Retry mode: symbol to retry. Leave blank for a normal cycle."
+        required: false
+
+jobs:
+  run-cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run one US+India stocks cycle
+        if: ${{ !inputs.retry_symbol }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AUTO_EXECUTE: ${{ vars.AUTO_EXECUTE || 'false' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python run.py cycle
+
+      - name: Retry one symbol's rejected entry
+        if: ${{ inputs.retry_symbol }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AUTO_EXECUTE: ${{ vars.AUTO_EXECUTE || 'false' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python run.py retry-entry --market "${{ inputs.retry_market }}" --symbol "${{ inputs.retry_symbol }}"

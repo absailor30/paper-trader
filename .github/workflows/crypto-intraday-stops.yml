@@ -1,0 +1,50 @@
+name: Crypto intraday stop check
+
+# Companion to crypto-cycle.yml's once-daily full cycle. This job ONLY
+# checks open positions' stop-loss/take-profit against the current price
+# and exits on a breach -- never opens a new position, never runs the
+# full (indicator-based) daily exit. See CHECKPOINT.md "Intraday stop
+# monitoring" for the real-data backtest result that motivated this
+# (2026-09-17: 5/8 crypto pairs improved, avg +3.39%, outlier-driven by
+# XRPUSDT/AVAXUSDT -- a first real signal, not a settled edge, so this
+# schedule and the underlying logic should be revisited periodically,
+# not trusted forever from one backtest pull).
+#
+# Runs against the SAME DATABASE_URL / crypto_portfolio state as
+# crypto-cycle.yml, so the two jobs never diverge on what's open --
+# they just read and write the same persisted positions on independent
+# schedules.
+
+on:
+  schedule:
+    # Every 30 minutes. CHECKPOINT.md's backtest didn't test a specific
+    # polling interval against alternatives (it compared "once daily" vs
+    # "every intraday bar" using 1h source data) -- 30 min is a
+    # reasonable starting cadence, tighter than the 1h bars actually
+    # backtested, intentionally conservative. Revisit if GitHub Actions
+    # minute-usage becomes a concern (each run is short -- no entries,
+    # no full backtest, just a price check against open positions).
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  check-stops:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check intraday stops on open positions
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AUTO_EXECUTE: ${{ vars.AUTO_EXECUTE || 'false' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python run.py crypto --stops-only

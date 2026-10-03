@@ -1,0 +1,50 @@
+name: Stocks intraday stop check
+
+# Companion to stocks-cycle.yml's once-daily full cycle. This job ONLY
+# checks open positions' stop-loss/take-profit against the current price
+# and exits on a breach -- never opens a new position, never runs the
+# full (indicator-based) daily exit. Mirrors crypto-intraday-stops.yml;
+# see CHECKPOINT.md "Intraday stop monitoring".
+#
+# Unlike crypto (24/7), stocks only need checking during market hours,
+# so this runs hourly across a window that covers both India (NSE:
+# ~03:45-10:00 UTC) and the US (NYSE/Nasdaq: ~13:30-20:00 UTC during
+# EDT, ~14:30-21:00 UTC during EST) rather than around the clock. The
+# window below is intentionally generous on both ends to tolerate that
+# DST drift without needing seasonal cron edits; a run outside actual
+# market hours just finds stale/unchanged data and, since it only acts
+# on open positions, costs nothing beyond a wasted API call.
+#
+# Runs against the SAME DATABASE_URL / us_portfolio+india_portfolio
+# state as stocks-cycle.yml, so the two jobs never diverge on what's
+# open -- they just read and write the same persisted positions on
+# independent schedules.
+
+on:
+  schedule:
+    # Hourly, weekdays, 03:00-21:00 UTC -- covers NSE and NYSE/Nasdaq
+    # market hours plus DST slop on both ends.
+    - cron: "0 3-21 * * 1-5"
+  workflow_dispatch: {}
+
+jobs:
+  check-stops:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check intraday stops on open positions
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AUTO_EXECUTE: ${{ vars.AUTO_EXECUTE || 'false' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python run.py cycle --stops-only
