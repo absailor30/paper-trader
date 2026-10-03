@@ -1,10 +1,11 @@
 """
-Propose-only shadow run of a candidate strategy on India, alongside the live
-Donchian. It NEVER places an order and NEVER touches the live portfolio
-state: it only keeps its own hypothetical ledger (open positions + closed
-trades, net of the same commission/slippage the backtests used) under its
-own state key, and sends a Telegram note on each hypothetical entry/exit, so
-the candidate can be judged on real days before it gets any real capital.
+Propose-only shadow runs of candidate strategies, alongside the live ones
+(India momentum, crypto Donchian 20/10). A shadow NEVER places an order and
+NEVER touches a live portfolio state: it only keeps its own hypothetical
+ledger (open positions + closed trades, net of the same commission/slippage
+the backtests used) under its own state key, and sends a Telegram note on
+each hypothetical entry/exit, so a candidate can be judged on real days
+before it gets any real capital.
 """
 from datetime import datetime, timedelta
 from typing import Optional
@@ -13,10 +14,12 @@ import pandas as pd
 from loguru import logger
 
 from paper_trader.config import settings
+from paper_trader.data.binance_fetcher import BinanceFetcher
 from paper_trader.data.fetcher import DataFetcher
 from paper_trader.notify import notify_fetch_failure, notify_shadow
 from paper_trader.persistence.state_store import load_state, save_state
 from paper_trader.strategy.base import Position, Strategy
+from paper_trader.strategy.donchian_breakout import DonchianBreakoutStrategy
 from paper_trader.strategy.momentum_trend import MomentumTrend
 
 STATE_KEY = "india_shadow_momentum"
@@ -27,18 +30,23 @@ def _net_return_pct(entry: float, exit_: float) -> float:
     return ((exit_ * (1 - s) * (1 - c)) / (entry * (1 + s) * (1 + c)) - 1) * 100
 
 
-class IndiaShadowRun:
-    def __init__(self, strategy: Optional[Strategy] = None, fetcher: Optional[DataFetcher] = None):
-        self.strategy = strategy or MomentumTrend(126, 0.10, 50)
-        self.fetcher = fetcher or DataFetcher()
-        self.state = load_state(STATE_KEY) or {"open": {}, "closed": [], "last_exit": {}}
+class ShadowRun:
+    label = "shadow"
+
+    def __init__(self, strategy: Strategy, fetcher, state_key: str):
+        self.strategy, self.fetcher, self.state_key = strategy, fetcher, state_key
+        self.state = load_state(state_key) or {"open": {}, "closed": [], "last_exit": {}}
+
+    def symbols(self) -> list:
+        raise NotImplementedError
+
+    def fetch(self) -> dict:
+        raise NotImplementedError
 
     def run(self) -> dict:
-        symbols = settings.india_stocks
-        data = self.fetcher.fetch_many(
-            symbols, start_date=(datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d"), india=True
-        )
-        notify_fetch_failure("INDIA shadow", len(symbols), len(data))
+        symbols = self.symbols()
+        data = self.fetch()
+        notify_fetch_failure(self.label, len(symbols), len(data))
 
         opened, closed = [], []
         open_pos, last_exit = self.state["open"], self.state["last_exit"]
@@ -83,7 +91,7 @@ class IndiaShadowRun:
             opened.append({"symbol": symbol, "price": signal.price, "reasoning": signal.reasoning})
             notify_shadow(self.strategy.name, "BUY", symbol, signal.price, signal.reasoning)
 
-        save_state(STATE_KEY, self.state)
+        save_state(self.state_key, self.state)
         return self._summary(data, opened, closed)
 
     def _summary(self, data: dict, opened: list, closed: list) -> dict:
@@ -95,7 +103,7 @@ class IndiaShadowRun:
             last = float(df["close"].iloc[-1]) if df is not None and not df.empty else None
             open_view[symbol] = {**pos, "last_price": last, "unrealized_pct": (
                 _net_return_pct(pos["entry_price"], last) if last else None)}
-        logger.info(f"INDIA shadow ({self.strategy.name}): opened={len(opened)} closed={len(closed)} open={len(open_view)}")
+        logger.info(f"{self.label} ({self.strategy.name}): opened={len(opened)} closed={len(closed)} open={len(open_view)}")
         return {
             "strategy": self.strategy.name, "executed": False,
             "opened_today": opened, "closed_today": closed, "open_positions": open_view,
@@ -103,3 +111,44 @@ class IndiaShadowRun:
             "win_rate_pct": (len(wins) / len(trades) * 100) if trades else None,
             "avg_net_return_pct": (sum(t["net_return_pct"] for t in trades) / len(trades)) if trades else None,
         }
+
+
+def _start_date() -> str:
+    return (datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d")
+
+
+class IndiaShadowRun(ShadowRun):
+    label = "INDIA shadow"
+
+    def __init__(self, strategy: Optional[Strategy] = None, fetcher: Optional[DataFetcher] = None):
+        super().__init__(strategy or MomentumTrend(126, 0.10, 50), fetcher or DataFetcher(), STATE_KEY)
+
+    def symbols(self) -> list:
+        return settings.india_stocks
+
+    def fetch(self) -> dict:
+        return self.fetcher.fetch_many(self.symbols(), start_date=_start_date(), india=True)
+
+
+def _completed_bars(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop the in-progress daily candle: backtests only ever see completed bars."""
+    today = pd.Timestamp.now(tz="UTC").normalize()
+    if df.index.tz is None:
+        today = today.tz_localize(None)
+    return df[df.index.normalize() < today]
+
+
+class CryptoShadowRun(ShadowRun):
+    label = "CRYPTO shadow"
+
+    def __init__(self, strategy: Optional[Strategy] = None, fetcher: Optional[BinanceFetcher] = None):
+        strategy = strategy or DonchianBreakoutStrategy(20, 10, None, name="Donchian_20_10_shadow")
+        super().__init__(strategy, fetcher or BinanceFetcher(market="spot"), f"crypto_shadow_{strategy.name}")
+
+    def symbols(self) -> list:
+        return settings.crypto_pairs
+
+    def fetch(self) -> dict:
+        data = self.fetcher.fetch_many(self.symbols(), start_date=_start_date())
+        completed = {s: _completed_bars(df) for s, df in data.items()}
+        return {s: df for s, df in completed.items() if not df.empty}

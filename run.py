@@ -19,6 +19,8 @@ CLI entry point.
     python run.py crypto --loop --interval-hours 24   # run cycles forever, sleeping between them
     python run.py shadow-india   # propose-only run of the India momentum candidate; never executes,
                                   # keeps its own hypothetical ledger (see paper_trader/shadow.py)
+    python run.py shadow-crypto  # propose-only run of crypto Donchian 20/10; never executes
+                                  # (see paper_trader/shadow.py)
     python run.py status         # refresh open positions to the latest price (via check_stops_only,
                                   # so a real stop can still fire) and print P&L for US, INDIA, CRYPTO
 """
@@ -69,6 +71,7 @@ def main():
 
     sub.add_parser("status")
     sub.add_parser("shadow-india")
+    sub.add_parser("shadow-crypto")
 
     rotation_parser = sub.add_parser("rotation")
     rotation_parser.add_argument(
@@ -115,6 +118,11 @@ def main():
     if args.command == "shadow-india":
         from paper_trader.shadow import IndiaShadowRun
         print(json.dumps(IndiaShadowRun().run(), indent=2, default=str))
+        return
+
+    if args.command == "shadow-crypto":
+        from paper_trader.shadow import CryptoShadowRun
+        print(json.dumps(CryptoShadowRun().run(), indent=2, default=str))
         return
 
     if args.command == "status":

@@ -35,3 +35,14 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python run.py crypto
+
+      # Propose-only shadow of Donchian 20/10 (see paper_trader/shadow.py).
+      # Never executes and never touches crypto_portfolio; continue-on-error
+      # so it can never fail the live cycle.
+      - name: Shadow crypto Donchian 20/10 (propose-only)
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python run.py shadow-crypto

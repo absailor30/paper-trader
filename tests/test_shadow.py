@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import numpy as np
+import pandas as pd
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -8,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 import paper_trader.persistence.state_store as state_store
 import paper_trader.shadow as shadow
 from paper_trader.config import settings
-from paper_trader.shadow import STATE_KEY, IndiaShadowRun
+from paper_trader.shadow import STATE_KEY, CryptoShadowRun, IndiaShadowRun
 from tests.conftest import _make_ohlcv
 
 
@@ -19,6 +20,7 @@ def isolated_db(tmp_path, monkeypatch):
     monkeypatch.setattr(state_store, "_engine", engine)
     monkeypatch.setattr(state_store, "_Session", sessionmaker(bind=engine))
     monkeypatch.setattr(settings, "india_stocks", ["RELIANCE"])
+    monkeypatch.setattr(settings, "crypto_pairs", ["BTCUSDT"])
     monkeypatch.setattr(settings, "telegram_bot_token", "")
     monkeypatch.setattr(settings, "telegram_chat_id", "")
 
@@ -89,3 +91,51 @@ def test_sends_shadow_notification_on_entry():
 
 def test_net_return_includes_costs():
     assert shadow._net_return_pct(100.0, 100.0) < 0
+
+
+class FakeCryptoFetcher:
+    def __init__(self, df):
+        self.df = df
+
+    def fetch_many(self, symbols, start_date, end_date=None, interval="1d"):
+        return {s: self.df for s in symbols}
+
+
+def _crypto_breakout(end=None):
+    flat = 100 - np.linspace(0, 2, 150)
+    rally = flat[-1] + np.linspace(0, 40, 40)
+    df = _make_ohlcv(np.concatenate([flat, rally]), "BTCUSDT")
+    if end is not None:
+        df.index = pd.date_range(end=end, periods=len(df), freq="D", tz="UTC")
+    return df
+
+
+def test_crypto_shadow_opens_on_breakout_and_never_touches_live_state():
+    run = CryptoShadowRun(fetcher=FakeCryptoFetcher(_crypto_breakout()))
+    result = run.run()
+    assert result["executed"] is False
+    assert [o["symbol"] for o in result["opened_today"]] == ["BTCUSDT"]
+    assert state_store.load_state("crypto_portfolio") is None
+    assert state_store.load_state(run.state_key) is not None
+    assert run.state_key == "crypto_shadow_Donchian_20_10_shadow"
+
+
+def test_crypto_shadow_drops_in_progress_candle():
+    today = pd.Timestamp.now(tz="UTC").normalize()
+    result = CryptoShadowRun(fetcher=FakeCryptoFetcher(_crypto_breakout(end=today))).run()
+    entry = result["open_positions"]["BTCUSDT"]["entry_date"]
+    assert entry == str((today - pd.Timedelta(days=1)).date())
+
+
+def test_crypto_shadow_same_bar_rerun_is_idempotent():
+    df = _crypto_breakout()
+    CryptoShadowRun(fetcher=FakeCryptoFetcher(df)).run()
+    second = CryptoShadowRun(fetcher=FakeCryptoFetcher(df)).run()
+    assert second["opened_today"] == [] and list(second["open_positions"]) == ["BTCUSDT"]
+
+
+def test_india_and_crypto_shadow_ledgers_are_separate():
+    IndiaShadowRun(fetcher=FakeFetcher(_rising())).run()
+    CryptoShadowRun(fetcher=FakeCryptoFetcher(_crypto_breakout())).run()
+    assert state_store.load_state(STATE_KEY)["open"].keys() == {"RELIANCE"}
+    assert state_store.load_state("crypto_shadow_Donchian_20_10_shadow")["open"].keys() == {"BTCUSDT"}

@@ -45,6 +45,24 @@ State of play, shortest honest version:
 - 2026-10-02 check: stocks-cycle (US+INDIA) and crypto-cycle both succeed and return `[]` (no signals). Crypto fetch works via the data-api.binance.vision fallback (primary 451s as expected). INDIA/US/CRYPTO empty = Donchian 55/20 breakout simply hasn't triggered; no fetch warnings or errors in logs. This is the strategy being selective (daily bars, ~55-day highs), not a bug. 
 - Breakout-distance report (2026-10-02, `breakout-distance.yml` manual workflow, real data): **INDIA** is blocked by the 100-day-SMA trend filter, not distance or price: all 15 symbols are below SMA100 (-3.7% to -17.4%); closest to the 20-day high are HDFCBANK 3.9%, AXISBANK 5.2%, ITC 5.9%. Only MARUTI (~114% of the Rs10k capital per share) is unaffordable. **US** (20d + SMA100): CAT 0.7% (but below SMA100), QQQ 0.9%, MSFT 1.4%, SPY 1.5%, NVDA 1.6% are nearest. **CRYPTO** (55d, no filter): BTC 1.2%, ETH 2.3%, SOL 2.6%, BNB 3.8%, ADA 4.1%; XRP 11%. Expect India to stay quiet until the market is above its 100-day averages; nothing is broken.
 
+## Crypto strategy search: faster-entry Donchian + propose-only shadow (2026-10-03)
+
+Real Binance data, 8 large-cap pairs, ~9y history (BTC from 2017-08), `scripts/crypto_strategy_search.py` via manual `crypto-strategy-search.yml`; same IS (before last 3y) / OOS (last 3y) scoring as the India search, $1,000/symbol, 12% position, costs included. **Live crypto strategy unchanged (Donchian 55/20, no filter).**
+
+| Variant | IS ret / medPF / trades | OOS ret / medPF / trades / WR |
+|---|---|---|
+| 55/20 (LIVE) | +32.3% / 3.00 / 127 | +12.1% / 2.34 / 94 / 53% |
+| 40/20 | +28.5% / 2.25 / 159 | +13.8% / 1.97 / 111 / 55% |
+| 30/15 | +34.4% / 2.39 / 181 | +9.8% / 1.69 / 133 / 48% |
+| **20/10** | +30.5% / 2.13 / 228 | +10.1% / 1.94 / 166 / 43% |
+| 10/5 | +25.4% / 1.52 / 375 | +9.6% / 1.50 / 256 / 41% |
+| 30/15 + SMA100 | +34.4% / 2.40 / 157 | +10.6% / 1.89 / 120 / 50% |
+| 20/10 + SMA100 | +26.3% / 2.18 / 188 | +10.7% / 1.91 / 135 / 49% |
+
+- **Reading:** every variant is positive in both periods (7/8 or 8/8 coins profitable), so the Donchian family works on these coins; the live 55/20 is NOT beaten. Faster entries give ~1.8x the trades (20/10: 166 vs 94 OOS) at a slightly lower profit factor and win rate and similar return (20/10 OOS +10.1% vs +12.1%). So faster = more signals, not more edge.
+- **Caveats:** 7 variants x 8 coins (no variant here is a discovery; they are all close), survivorship bias (only today's big coins; buy-and-hold was +596% IS / +146% OOS, strategies capture a fraction), per-symbol 12% sizing so absolute returns are small, backtests use completed daily bars while the live run sees whatever candle exists at run time (cron 00:10 UTC, GitHub often delays it to ~05:xx UTC, so the live signal can see a part-formed daily candle; impact not measured).
+- **Propose-only shadow of 20/10 (chosen because it was the user's ask and gives the most extra signals without the 10/5 PF collapse; NOT chosen by ranking):** `CryptoShadowRun` in `paper_trader/shadow.py`, `python run.py shadow-crypto`, runs after each daily crypto cycle (`crypto-cycle.yml`, `continue-on-error`) and via manual `shadow-crypto.yml`. Never places orders, never touches `crypto_portfolio`; ledger under state key `crypto_shadow_Donchian_20_10_shadow`; drops the in-progress daily candle so it acts only on completed bars; Telegram "SHADOW BUY/SELL ... NOT executed" per entry/exit. `shadow.py` is now a shared `ShadowRun` base (India momentum + crypto). Bug caught by a test while building it: the shared `run()` saved under the India key, which would have overwritten the India ledger; now `self.state_key`, with a test that the two ledgers stay separate.
+
 ## India strategy search: looser trend filter + alternatives (2026-10-02)
 
 Real data, 15 India symbols, 10y history (2016-09 to 2026-10), `scripts/india_strategy_search.py` via manual `india-strategy-search.yml`. Each variant scored in-sample (before last 3y) and out-of-sample (last 3y), Rs10k/symbol, 12% position, costs included. **No change made to the live strategy.**
@@ -210,6 +228,7 @@ headline metric is weaker evidence than a [NEW] row's.
 | **Donchian (all variants)** | **Crypto LARGE cap** | **47-51% WR, PF 2.1-2.3, DD -10 to -12%** | **[NEW]** | **BEST SURVIVING CANDIDATE — gauntlet incomplete** |
 | Donchian (all variants) | Crypto MID cap | 41-45% WR, PF 1.56-1.88 | [NEW] | Degrades from large |
 | Donchian (all variants) | Crypto SMALL cap | 36-40% WR, PF 1.40-1.54; PF 2.79 risers vs 1.27 fallers | [NEW] | Edge does NOT transfer down-cap |
+| Donchian 55/20 (live) vs 40/20, 30/15, 20/10, 10/5 (+SMA100) | Crypto large cap, 8 pairs, ~9y | all positive IS and OOS; live 55/20 OOS +12.1% medPF 2.34 (94 trades); 20/10 OOS +10.1% medPF 1.94 (166 trades) | [NEW] | Faster = more trades, not more edge; live not beaten. 20/10 shadowed propose-only |
 | Donchian 20/10 (tf none/20/50/100) | India, 15 sym, 10y | IS ret ~+4% med PF 1.6; OOS (last 3y) -0.42% to +0.08%, med PF 1.05-1.25 | [NEW] | Edge faded OOS; looser trend filters are identical to none, no help |
 | Donchian 10/5 | India, 15 sym, 10y | OOS 3-4/15 profitable, -0.9% to -1.4% | [NEW] | DEAD on India |
 | Momentum 126d>=10% + SMA50 | India, 15 sym, 10y | IS +3.91% 13/15; OOS +1.08% 11/15, med PF 1.36, DD -2.3%, 209 trades | [NEW] | Best India candidate; tiny, best-of-16 risk, OOS not clean. Not deployed |

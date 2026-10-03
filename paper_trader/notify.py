@@ -61,8 +61,9 @@ def notify_circuit_breaker(market: str, reason: str) -> None:
 
 def notify_shadow(strategy: str, side: str, symbol: str, price: float, detail: str) -> None:
     """Hypothetical entry/exit from a propose-only shadow strategy -- nothing was executed."""
+    shown = f"{price:,.4f}" if price < 10 else f"{price:,.2f}"
     send_telegram_message(
-        f"\U0001F47B <b>SHADOW {side}</b> {symbol} @ {price:,.2f}\n"
+        f"\U0001F47B <b>SHADOW {side}</b> {symbol} @ {shown}\n"
         f"{strategy} -- NOT executed (propose-only)\n{detail}"
     )
 

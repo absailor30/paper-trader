@@ -1,0 +1,25 @@
+name: Shadow crypto Donchian 20/10
+
+# Manual trigger for the propose-only shadow run (also runs after the daily
+# crypto cycle in crypto-cycle.yml). Never executes and never touches the
+# live portfolio; idempotent per market bar.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  shadow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Shadow crypto Donchian 20/10 (propose-only)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python run.py shadow-crypto
