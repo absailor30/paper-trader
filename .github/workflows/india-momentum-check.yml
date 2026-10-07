@@ -1,0 +1,20 @@
+name: India momentum check
+
+# Manual-only, read-only: shows each India stock's 126d return and price vs
+# SMA50, i.e. why the live momentum entry did or did not fire.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: India momentum check
+        run: PYTHONPATH=. python scripts/india_momentum_check.py 2>&1 | grep -v "WARNING\|INFO"
