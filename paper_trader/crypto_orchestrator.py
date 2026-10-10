@@ -67,7 +67,7 @@ class CryptoTradingBot:
         target = portfolio_value * settings.max_position_size
         allocated = min(target, available_cash)
 
-        if price <= 0 or allocated <= 0:
+        if price <= 0 or allocated < settings.min_position_value:
             return 0.0
         return round(allocated / price, 6)
 

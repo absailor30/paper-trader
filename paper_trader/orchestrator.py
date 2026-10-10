@@ -92,6 +92,16 @@ class TradingBot:
         target = portfolio_value * settings.max_position_size
         allocated = min(target, available_cash)
 
+        # A real production run bought 0.0001 shares of PG (~$0.015) because
+        # cash was nearly exhausted and nothing floored the position size;
+        # the backtest engine already refuses allocations under this value.
+        if allocated < settings.min_position_value:
+            logger.warning(
+                f"Position skipped: allocation {allocated:.4f} is below the minimum "
+                f"position value {settings.min_position_value}"
+            )
+            return 0.0
+
         # place_order fills BUYs at price*(1+slippage_rate) and adds
         # commission on top of that -- sizing off raw `price` alone
         # budgets less than the real total_cost, so a trade sized right at

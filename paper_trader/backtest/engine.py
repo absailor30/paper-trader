@@ -67,7 +67,7 @@ class BacktestResult:
 def _position_size(portfolio_value: float, price: float, available_cash: float) -> float:
     target = portfolio_value * settings.max_position_size
     allocated = min(target, available_cash)
-    if price <= 0 or allocated < 1.0:
+    if price <= 0 or allocated < settings.min_position_value:
         return 0.0
     return round(allocated / price, 4)
 

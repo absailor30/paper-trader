@@ -248,3 +248,9 @@ def test_crypto_uses_donchian_20_10_no_trend_filter():
     assert (bot.strategy.entry_period, bot.strategy.exit_period) == (20, 10)
     assert bot.strategy.trend_filter_period is None
     assert bot.strategy.name == "Donchian_Crypto_20_10"
+
+
+def test_crypto_dust_cash_does_not_open_a_dust_position():
+    bot = CryptoTradingBot()
+    bot.trader.portfolio.capital = 0.02
+    assert bot._position_size(100.0) == 0.0

@@ -186,6 +186,13 @@ class TestCheckStopsOnly:
         assert second == []
 
 
+def _fully_invested(bot, cash):
+    """Mimic the real 2026-10-10 state: ~$100 of open positions, almost no cash."""
+    p = bot.traders["US"].portfolio
+    p.capital = cash
+    p.positions["HELD"] = {"quantity": 1.0, "entry_price": 100.0, "current_price": 100.0}
+
+
 class TestPositionSizing:
     """Real production bug (2026-09-21): a $100-capital account got a real
     Donchian buy signal on a ~$560 stock and _position_size skipped it
@@ -211,6 +218,22 @@ class TestPositionSizing:
         trader = bot.traders["US"]
         effective_price = 100.0 * (1 + trader.slippage_rate) * (1 + trader.commission_rate)
         assert qty == round(10_000.0 * settings.max_position_size / effective_price, 4)
+
+    def test_dust_cash_does_not_open_a_dust_position(self, monkeypatch):
+        """Real production bug (2026-10-10): cash was ~1.5 cents, and the
+        orchestrator bought 0.0001 shares of PG (~$0.015)."""
+        monkeypatch.setitem(orchestrator.MARKETS, "US", {"symbols": ["PG"], "capital": 100.0, "india": False})
+        bot = TradingBot()
+        _fully_invested(bot, 0.0151)
+
+        assert bot._position_size(bot.traders["US"], price=150.67) == 0.0
+
+    def test_just_above_minimum_value_still_sizes(self, monkeypatch):
+        monkeypatch.setitem(orchestrator.MARKETS, "US", {"symbols": ["PG"], "capital": 100.0, "india": False})
+        bot = TradingBot()
+        _fully_invested(bot, settings.min_position_value + 0.5)
+
+        assert bot._position_size(bot.traders["US"], price=150.67) > 0
 
     def test_zero_cash_still_skips(self, monkeypatch):
         monkeypatch.setitem(orchestrator.MARKETS, "US", {"symbols": ["AAPL"], "capital": 100.0, "india": False})

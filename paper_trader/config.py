@@ -68,6 +68,8 @@ class Settings(BaseSettings):
 
     # Risk parameters
     max_position_size: float = 0.12       # max 12% of portfolio per position
+    min_position_value: float = 1.0       # never open a position smaller than this (dust: a 2026-10-10 live
+                                          # buy was 0.0001 sh = $0.015); same floor live and in the backtest engine
     max_daily_loss: float = 0.04          # daily circuit breaker
     max_drawdown: float = 0.15            # total circuit breaker
     concentration_ceiling: float = 0.5    # hard cap on a single minimum-viable order
