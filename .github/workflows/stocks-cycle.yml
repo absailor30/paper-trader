@@ -68,3 +68,16 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python run.py retry-entry --market "${{ inputs.retry_market }}" --symbol "${{ inputs.retry_symbol }}"
+
+      # Jev makes buy/sell/hold decisions in its OWN paper accounts (paper_trader/jev_trader.py).
+      # Separate state from the rule-based portfolios; continue-on-error so it can never fail the live cycle.
+      - name: Jev decision accounts
+        if: ${{ !inputs.retry_symbol }}
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AUTO_EXECUTE: ${{ vars.AUTO_EXECUTE || 'false' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        run: python run.py jev-trade --markets US,INDIA

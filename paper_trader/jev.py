@@ -50,8 +50,8 @@ def _load_sdk():
     return None
 
 
-def ask(state_text: str, client: Any = None, noul_cls: Any = None) -> Optional[float]:
-    """Probability of 'yes' for QUESTION given state_text, or None on any failure."""
+def ask(state_text: str, client: Any = None, noul_cls: Any = None, question: str = QUESTION) -> Optional[float]:
+    """Probability of 'yes' for `question` given state_text, or None on any failure."""
     try:
         if client is None:
             sdk = _load_sdk()
@@ -59,7 +59,7 @@ def ask(state_text: str, client: Any = None, noul_cls: Any = None) -> Optional[f
                 return None
             client_cls, noul_cls = sdk
             client = client_cls()
-        resp = client.system_one(state=state_text, questions={"followthrough": noul_cls(instructions=QUESTION)})
+        resp = client.system_one(state=state_text, questions={"followthrough": noul_cls(instructions=question)})
         return float(resp.answers["followthrough"].noul)
     except Exception as e:
         logger.warning(f"Jev ask failed: {e}")

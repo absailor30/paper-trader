@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # Telegram credentials are ever needed for local dev or tests.
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+    jev_buy_threshold: float = 0.65        # Jev decision account: open a long when p(open) >= this (a guess, tune only on forward data)
+    jev_sell_threshold: float = 0.55       # close a held position when p(close) >= this
+    jev_max_positions: int = 6             # max open positions per market in the Jev account
     typesafe_api_key: str = ""            # TYPESAFE_API_KEY; empty = Jev log-only opinions disabled
 
     # Capital

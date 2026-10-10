@@ -21,6 +21,7 @@ CLI entry point.
                                   # keeps its own hypothetical ledger (see paper_trader/shadow.py)
     python run.py shadow-crypto  # propose-only run of crypto Donchian 20/10; never executes
                                   # (see paper_trader/shadow.py)
+    python run.py jev-trade [--markets US,INDIA,CRYPTO]   # Jev makes the buy/sell/hold decisions in its OWN paper accounts
     python run.py jev-report     # calibration of the log-only Jev opinions vs real outcomes
     python run.py status         # refresh open positions to the latest price (via check_stops_only,
                                   # so a real stop can still fire) and print P&L for US, INDIA, CRYPTO
@@ -74,6 +75,8 @@ def main():
     sub.add_parser("shadow-india")
     sub.add_parser("shadow-crypto")
     sub.add_parser("jev-report")
+    jev_trade_parser = sub.add_parser("jev-trade")
+    jev_trade_parser.add_argument("--markets", default="US,INDIA,CRYPTO")
 
     rotation_parser = sub.add_parser("rotation")
     rotation_parser.add_argument(
@@ -127,6 +130,11 @@ def main():
         print(json.dumps(CryptoShadowRun().run(), indent=2, default=str))
         return
 
+    if args.command == "jev-trade":
+        from paper_trader.jev_trader import JevTrader
+        print(json.dumps(JevTrader().run([m.strip().upper() for m in args.markets.split(",")]), indent=2, default=str))
+        return
+
     if args.command == "jev-report":
         from paper_trader import jev
         print(json.dumps(jev.report(), indent=2, default=str))
@@ -137,7 +145,9 @@ def main():
         crypto_bot = CryptoTradingBot()
         stop_actions = stock_bot.check_all_stops_only()
         crypto_stop_actions = crypto_bot.check_stops_only()
+        from paper_trader.jev_trader import jev_status
         result = {
+            "JEV": jev_status(["US", "INDIA", "CRYPTO"]),
             "US": {**stock_bot.get_status("US"), "stop_actions": stop_actions["US"]},
             "INDIA": {**stock_bot.get_status("INDIA"), "stop_actions": stop_actions["INDIA"]},
             "CRYPTO": {**crypto_bot.get_status(), "stop_actions": crypto_stop_actions},

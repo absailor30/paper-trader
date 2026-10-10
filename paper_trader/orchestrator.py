@@ -39,6 +39,73 @@ def _floor4(shares: float) -> float:
     return math.floor(shares * 10_000) / 10_000
 
 
+def size_position(trader: PaperTrader, price: float, india: bool = False) -> float:
+    # NSE/BSE brokers only fill whole shares -- no fractional trading
+    # in India, unlike US brokers (Alpaca, Schwab, etc.) which do.
+    # This is a real, permanent market-structure difference, not a
+    # config knob: `india` forces every quantity below to a whole
+    # number for that market, while US sizing stays fractional.
+    if price <= 0:
+        return 0.0
+
+    portfolio_value = trader.portfolio.total_value
+    available_cash = trader.portfolio.capital
+    target = portfolio_value * settings.max_position_size
+    allocated = min(target, available_cash)
+
+    # A real production run bought 0.0001 shares of PG (~$0.015) because
+    # cash was nearly exhausted and nothing floored the position size;
+    # the backtest engine already refuses allocations under this value.
+    if allocated < settings.min_position_value:
+        logger.warning(
+            f"Position skipped: allocation {allocated:.4f} is below the minimum "
+            f"position value {settings.min_position_value}"
+        )
+        return 0.0
+
+    # place_order fills BUYs at price*(1+slippage_rate) and adds
+    # commission on top of that -- sizing off raw `price` alone
+    # budgets less than the real total_cost, so a trade sized right at
+    # the edge of available cash spuriously gets REJECTED downstream
+    # (seen for real: QQQ sized to fit $49.90 cash, then rejected
+    # needing $50.00 once slippage+commission were applied). Same bug
+    # class as the rotation-backtest capital-rejection fix -- reserve
+    # the same headroom here.
+    effective_price = price * (1 + trader.slippage_rate) * (1 + trader.commission_rate)
+
+    shares = allocated / effective_price
+    if shares >= 1 or portfolio_value < 1:
+        return math.floor(shares) if india else _floor4(shares)
+
+    # Target allocation alone can't afford even 1 share (e.g. a $500+
+    # stock against a small account's 12% target). For the US, where
+    # fractional shares are supported end-to-end (place_order takes
+    # qty as-is, no int rounding), size up to the hard concentration
+    # ceiling instead of forcing a whole share: requiring a full share
+    # here would spend far more than the target risk budget, or (as
+    # found from a real production run where a real signal was
+    # silently dropped) skip a real signal outright even though the
+    # account could easily afford a fractional position. For India,
+    # a whole share below the ceiling is the best this account can
+    # do -- there is no smaller unit to fall back to.
+    ceiling_allocated = min(portfolio_value * settings.concentration_ceiling, available_cash)
+    ceiling_shares = ceiling_allocated / effective_price
+
+    if india:
+        whole_shares = math.floor(ceiling_shares)
+        if whole_shares >= 1:
+            return float(whole_shares)
+        logger.warning(f"Position skipped: price {price} exceeds available cash for even 1 whole share (India)")
+        return 0.0
+
+    floored = _floor4(ceiling_shares)
+    if floored > 0:
+        return floored
+
+    logger.warning(f"Position skipped: price {price} exceeds available cash")
+    return 0.0
+
+
 class TradingBot:
     def __init__(self):
         self.fetcher = DataFetcher()
@@ -80,70 +147,7 @@ class TradingBot:
         return True
 
     def _position_size(self, trader: PaperTrader, price: float, india: bool = False) -> float:
-        # NSE/BSE brokers only fill whole shares -- no fractional trading
-        # in India, unlike US brokers (Alpaca, Schwab, etc.) which do.
-        # This is a real, permanent market-structure difference, not a
-        # config knob: `india` forces every quantity below to a whole
-        # number for that market, while US sizing stays fractional.
-        if price <= 0:
-            return 0.0
-
-        portfolio_value = trader.portfolio.total_value
-        available_cash = trader.portfolio.capital
-        target = portfolio_value * settings.max_position_size
-        allocated = min(target, available_cash)
-
-        # A real production run bought 0.0001 shares of PG (~$0.015) because
-        # cash was nearly exhausted and nothing floored the position size;
-        # the backtest engine already refuses allocations under this value.
-        if allocated < settings.min_position_value:
-            logger.warning(
-                f"Position skipped: allocation {allocated:.4f} is below the minimum "
-                f"position value {settings.min_position_value}"
-            )
-            return 0.0
-
-        # place_order fills BUYs at price*(1+slippage_rate) and adds
-        # commission on top of that -- sizing off raw `price` alone
-        # budgets less than the real total_cost, so a trade sized right at
-        # the edge of available cash spuriously gets REJECTED downstream
-        # (seen for real: QQQ sized to fit $49.90 cash, then rejected
-        # needing $50.00 once slippage+commission were applied). Same bug
-        # class as the rotation-backtest capital-rejection fix -- reserve
-        # the same headroom here.
-        effective_price = price * (1 + trader.slippage_rate) * (1 + trader.commission_rate)
-
-        shares = allocated / effective_price
-        if shares >= 1 or portfolio_value < 1:
-            return math.floor(shares) if india else _floor4(shares)
-
-        # Target allocation alone can't afford even 1 share (e.g. a $500+
-        # stock against a small account's 12% target). For the US, where
-        # fractional shares are supported end-to-end (place_order takes
-        # qty as-is, no int rounding), size up to the hard concentration
-        # ceiling instead of forcing a whole share: requiring a full share
-        # here would spend far more than the target risk budget, or (as
-        # found from a real production run where a real signal was
-        # silently dropped) skip a real signal outright even though the
-        # account could easily afford a fractional position. For India,
-        # a whole share below the ceiling is the best this account can
-        # do -- there is no smaller unit to fall back to.
-        ceiling_allocated = min(portfolio_value * settings.concentration_ceiling, available_cash)
-        ceiling_shares = ceiling_allocated / effective_price
-
-        if india:
-            whole_shares = math.floor(ceiling_shares)
-            if whole_shares >= 1:
-                return float(whole_shares)
-            logger.warning(f"Position skipped: price {price} exceeds available cash for even 1 whole share (India)")
-            return 0.0
-
-        floored = _floor4(ceiling_shares)
-        if floored > 0:
-            return floored
-
-        logger.warning(f"Position skipped: price {price} exceeds available cash")
-        return 0.0
+        return size_position(trader, price, india)
 
     def run_market_cycle(self, market: str) -> List[dict]:
         cfg = MARKETS[market]

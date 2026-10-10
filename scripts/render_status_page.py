@@ -61,6 +61,9 @@ def main():
     cards = "".join(
         market_card(k, label, status[k])
         for k, label in [("CRYPTO", "Crypto — Binance spot"), ("US", "US Stocks"), ("INDIA", "India Stocks")]
+    ) + "".join(
+        market_card(k, f"Jev (AI decisions, own paper account) — {k}", data)
+        for k, data in status.get("JEV", {}).items()
     )
     html = f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
