@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     # Telegram credentials are ever needed for local dev or tests.
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+    typesafe_api_key: str = ""            # TYPESAFE_API_KEY; empty = Jev log-only opinions disabled
 
     # Capital
     us_capital: float = 100.0

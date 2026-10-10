@@ -22,6 +22,7 @@ from typing import List
 
 from loguru import logger
 
+from paper_trader import jev
 from paper_trader.config import settings
 from paper_trader.data.binance_fetcher import BinanceFetcher
 from paper_trader.execution.paper_trader import PaperTrader
@@ -91,6 +92,7 @@ class CryptoTradingBot:
         # above, which reads them) silently reported 0% unrealized P&L
         # forever. Real bug, found while wiring P&L into the dashboard.
         self.trader.update_prices({s: float(df["close"].iloc[-1]) for s, df in data.items() if not df.empty})
+        jev.update("CRYPTO", data)
 
         # 1. Exits on open positions
         for symbol, position in list(self.trader.portfolio.positions.items()):
@@ -135,6 +137,7 @@ class CryptoTradingBot:
             signal = self.strategy.generate_signal(df)
             if signal is None:
                 continue
+            jev.observe("CRYPTO", symbol, self.strategy.name, signal, df)  # log-only, never affects the trade
 
             qty = self._position_size(signal.price)
             if qty <= 0:

@@ -21,6 +21,7 @@ CLI entry point.
                                   # keeps its own hypothetical ledger (see paper_trader/shadow.py)
     python run.py shadow-crypto  # propose-only run of crypto Donchian 20/10; never executes
                                   # (see paper_trader/shadow.py)
+    python run.py jev-report     # calibration of the log-only Jev opinions vs real outcomes
     python run.py status         # refresh open positions to the latest price (via check_stops_only,
                                   # so a real stop can still fire) and print P&L for US, INDIA, CRYPTO
 """
@@ -72,6 +73,7 @@ def main():
     sub.add_parser("status")
     sub.add_parser("shadow-india")
     sub.add_parser("shadow-crypto")
+    sub.add_parser("jev-report")
 
     rotation_parser = sub.add_parser("rotation")
     rotation_parser.add_argument(
@@ -123,6 +125,11 @@ def main():
     if args.command == "shadow-crypto":
         from paper_trader.shadow import CryptoShadowRun
         print(json.dumps(CryptoShadowRun().run(), indent=2, default=str))
+        return
+
+    if args.command == "jev-report":
+        from paper_trader import jev
+        print(json.dumps(jev.report(), indent=2, default=str))
         return
 
     if args.command == "status":
