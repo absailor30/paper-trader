@@ -98,6 +98,23 @@ Last 3 years per fund (Donchian 55/20, return/trades): SLV +11.9%/14, GLD +4.6%/
 
 **Verdict:** do not add commodities live. The current US rule (20/10 + SMA100) earned about nothing on commodities in the last 3 years, so commodities should not simply be added to the US universe. Donchian 55/20 passes the screen (positive in both periods, 91 last-3-year trades) so it is a candidate for a propose-only shadow trial, but 8 funds x 6 variants = multiple-comparison risk, precious metals do the work, and the $100 US account is already ~60% cash. Low priority.
 
+## Commodities: 8-fund, 3-period strategy search (2026-10-15)
+
+User decision: commodities stay a SEPARATE account with its own $100 (`settings.commodities_capital`), fixed list of 8 (`settings.commodities`): GLD gold, SLV silver, PPLT platinum, PALL palladium, GLTR precious-metals basket, CPER copper, USO WTI oil, BNO Brent oil. All 8 loaded, 2,533 daily bars each (2016-09 to 2026-10). `scripts/commodities_search.py` / `commodities-search.yml` tests 12 rules in THREE separate periods (roughly 2017-2020, 2020-2023, 2023-2026), per-fund 10,000, 12% position, costs included. Account NOT wired yet; waiting for the user's yes.
+
+Average return per fund (P1 / P2 / P3), median profit factor in brackets, trades per period:
+- **Donchian 55/20: +1.21 / +1.05 / +3.91 (PF 1.62 / 1.49 / 2.12; 69 / 82 / 102 trades) ROBUST, best worst-period**
+- **Donchian 55/20 + SMA200: +0.85 / +1.08 / +4.28 (1.60 / 1.26 / 2.10) ROBUST**
+- Donchian 20/10: +1.98 / +0.59 / +0.86 (1.58 / 1.28 / 1.11) ROBUST
+- Donchian 30/15: +2.09 / +0.16 / +2.26 (2.09 / 1.05 / 1.35) ROBUST (P2 barely)
+- Not robust: 10/5 (+0.41 / -1.06 / +3.05), 100/50 (P1 PF 0.97), 20/10 + SMA100 (P3 PF 1.00), Momentum 63d (P1 PF 0.75), 126d (P1 PF 0.70), 252d (P2 -0.07), Trend SMA50/200 (+0.48 / -0.01 / -0.18), RSI dip-buying (+0.03 / -0.81 / -0.92).
+- Buy-and-hold per fund: +43.8% / +9.1% / +91.8%; at the same 12% exposure +5.3% / +1.1% / +11.0%.
+
+Per fund with Donchian 55/20 (P1 | P2 | P3): GLD +1.2 | +0.8 | +4.6; SLV +0.1 | -2.5 | +11.9; PPLT +1.0 | +1.3 | +4.2; PALL +5.9 | -2.0 | -3.2; GLTR +1.1 | -0.1 | +8.8; CPER -1.3 | +2.6 | -3.7; USO -1.2 | +3.8 | +5.2; **BNO +2.8 | +4.4 | +3.5** (BNO positive in all three periods under every robust rule: the most consistent fund). Palladium and copper, two of the user's picks, were NOT consistent (PALL good only in P1, CPER negative in 2 of 3).
+
+**Honest verdict:** slow breakouts (55/20, optionally with a 200-day filter) make money in all three periods, so a rule that works exists here, with a small edge: roughly +1% to +4% per fund per ~3.3-year period (about +8% to +31% for an 8-fund account fully deployed at 12% each, since account return ~ 8 x the per-fund average). **But simply holding all 8 funds at the same 12% beat the rule in P1 and P3 and roughly tied in P2** (hold: ~+42% / +9% / +88% on 8 funds; 55/20: ~+10% / +8% / +31%). The rule's possible benefit is being out of the market during drops (smaller drawdowns); buy-and-hold drawdown was NOT measured here, so that benefit is unproven. Caveats: 12 rules x 8 funds x 3 periods = multiple-comparison risk; precious-metal and oil trends in 2023-26 carry P3; oil funds (USO/BNO) lose to futures roll decay when held.
+**Recommendation made to user:** Donchian 55/20 (simplest robust rule, fewest trades) in a separate $100 COMMODITIES paper account (~$12 per position, fractional ETF shares).
+
 ## Trade history + why India has no buys (2026-10-14)
 
 - **Project goal (user, 2026-10-14):** a mostly self-running trading system, not millions, just something; the **small budget is deliberate** (the user cannot put in $10K) so the point is to see how the system behaves at ~$100 (US/crypto) and Rs10,000 (India). Do not "fix" it by assuming a bigger account. Known cost of the small account: US is fully invested, so later signals get skipped for lack of cash.
