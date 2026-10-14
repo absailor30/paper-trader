@@ -115,6 +115,17 @@ Per fund with Donchian 55/20 (P1 | P2 | P3): GLD +1.2 | +0.8 | +4.6; SLV +0.1 | 
 **Honest verdict:** slow breakouts (55/20, optionally with a 200-day filter) make money in all three periods, so a rule that works exists here, with a small edge: roughly +1% to +4% per fund per ~3.3-year period (about +8% to +31% for an 8-fund account fully deployed at 12% each, since account return ~ 8 x the per-fund average). **But simply holding all 8 funds at the same 12% beat the rule in P1 and P3 and roughly tied in P2** (hold: ~+42% / +9% / +88% on 8 funds; 55/20: ~+10% / +8% / +31%). The rule's possible benefit is being out of the market during drops (smaller drawdowns); buy-and-hold drawdown was NOT measured here, so that benefit is unproven. Caveats: 12 rules x 8 funds x 3 periods = multiple-comparison risk; precious-metal and oil trends in 2023-26 carry P3; oil funds (USO/BNO) lose to futures roll decay when held.
 **Recommendation made to user:** Donchian 55/20 (simplest robust rule, fewest trades) in a separate $100 COMMODITIES paper account (~$12 per position, fractional ETF shares).
 
+## Commodities: portfolio-level tests, rotation wins (2026-10-15)
+
+`scripts/commodities_portfolio_search.py` (workflow `commodities-portfolio-search.yml`, run 38644644539). One simple simulator for all rules (channel exits only, no ATR stop; comparable with each other, NOT with the per-fund engine table above), 8 funds, 2016-09 to 2026-10, 12% per position, costs included. Account return P1 / P2 / P3 (max DD worst period, avg exposure):
+- Buy & hold 12% each: +36.5 / +18.1 / +97.2 (DD -34%, 96% exposed)
+- Donchian 55/20 baseline: +7.0 / +16.3 / +39.6 (~34% exposed)
+- Donchian 55/20 vol-scaled: +6.5 / +4.7 / +29.7 (worse than baseline, drop)
+- Keltner EMA20 +2xATR10: +8.6 / +10.3 / +13.3; Keltner EMA50 +3xATR20: +6.2 / +14.2 / +50.4 (no better than Donchian)
+- **Rotation top3 (month-end, 126d return > 0, above SMA200): +15.6 / +24.5 / +31.0**, ~30% exposed, DD -17%. Only rule beating hold-at-same-exposure (~+11/+6/+30) in all three periods. Top2 strong per exposure but 13 entries in P1 (< 15).
+- Caveats: 7 rules x 3 periods (luck possible), P3 is a gold/silver bull run, few monthly trades, oil roll decay, simplified simulator.
+- **Recommendation to user:** Rotation top3 for the separate $100 COMMODITIES account (not wired yet; awaiting live vs propose-only decision).
+
 ## Trade history + why India has no buys (2026-10-14)
 
 - **Project goal (user, 2026-10-14):** a mostly self-running trading system, not millions, just something; the **small budget is deliberate** (the user cannot put in $10K) so the point is to see how the system behaves at ~$100 (US/crypto) and Rs10,000 (India). Do not "fix" it by assuming a bigger account. Known cost of the small account: US is fully invested, so later signals get skipped for lack of cash.
