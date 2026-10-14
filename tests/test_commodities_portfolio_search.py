@@ -54,3 +54,18 @@ def test_robust_needs_entries_in_every_period():
     assert cps.is_robust(ok)
     ok["P2"]["entries"] = 3
     assert not cps.is_robust(ok)
+
+
+def test_decision_frequency_masks():
+    idx = pd.bdate_range("2026-01-01", periods=60)
+    d, w, m = (cps.period_end_mask(idx, f) for f in "DWM")
+    assert d.all() and m.sum() == 3 and w.sum() == 13 and not (m & ~w).any()  # month-ends are week-ends
+    assert idx[w][0].dayofweek == 4  # Fridays
+
+
+def test_daily_rotation_reacts_faster_than_monthly():
+    close, _, _ = _frames()
+    close["FLAT"] = np.where(np.arange(len(close)) > 350, 100 * 1.02 ** (np.arange(len(close)) - 350), 100.0)
+    daily = cps.rotation_weights(close, 3, 60, 100, "D")
+    monthly = cps.rotation_weights(close, 3, 60, 100, "M")
+    assert (daily != monthly).any().any() and (daily.diff().abs().sum().sum() >= monthly.diff().abs().sum().sum())

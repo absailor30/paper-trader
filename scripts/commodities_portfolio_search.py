@@ -58,13 +58,21 @@ def keltner_weights(close, high, low, span=20, atr_n=10, k=2.0) -> pd.DataFrame:
     return pd.DataFrame(w)
 
 
-def rotation_weights(close, top=3, lookback=126, trend=200) -> pd.DataFrame:
-    """Month-end: hold the `top` funds by lookback return that are up AND above their SMA(trend)."""
+def period_end_mask(index: pd.DatetimeIndex, freq: str) -> np.ndarray:
+    """True on the bar where a rebalance DECISION is made: last bar of the month ("M") / ISO week ("W"), or every bar ("D")."""
+    if freq == "D":
+        return np.ones(len(index), dtype=bool)
+    keys = [index.year, index.month] if freq == "M" else [index.isocalendar().year.values, index.isocalendar().week.values]
+    s = index.to_series()
+    return (s.groupby(keys).transform("max") == s).values
+
+
+def rotation_weights(close, top=3, lookback=126, trend=200, freq="M") -> pd.DataFrame:
+    """At each decision bar: hold the `top` funds by lookback return that are up AND above their SMA(trend)."""
     mom = close / close.shift(lookback) - 1
     ok = (mom > 0) & (close > close.rolling(trend).mean())
-    month_end = close.index.to_series().groupby([close.index.year, close.index.month]).transform("max") == close.index.to_series()
     w = pd.DataFrame(np.nan, index=close.index, columns=close.columns)
-    for t in close.index[month_end.values]:
+    for t in close.index[period_end_mask(close.index, freq)]:
         pick = mom.loc[t].where(ok.loc[t]).dropna().nlargest(top).index
         w.loc[t] = 0.0
         w.loc[t, pick] = BASE_W
@@ -99,8 +107,9 @@ def rules(close, high, low) -> dict:
         "Donchian 55/20 vol-scaled": donchian_weights(close, high, low, vol_target=0.15),
         "Keltner EMA20 +2xATR10": keltner_weights(close, high, low, 20, 10, 2.0),
         "Keltner EMA50 +3xATR20": keltner_weights(close, high, low, 50, 20, 3.0),
-        "Rotation top3, 126d, SMA200": rotation_weights(close, 3, 126, 200),
-        "Rotation top2, 126d, SMA200": rotation_weights(close, 2, 126, 200),
+        "Rotation top3 MONTHLY (live now)": rotation_weights(close, 3, 126, 200, "M"),
+        "Rotation top3 WEEKLY": rotation_weights(close, 3, 126, 200, "W"),
+        "Rotation top3 DAILY": rotation_weights(close, 3, 126, 200, "D"),
     }
 
 
