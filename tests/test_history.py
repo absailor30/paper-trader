@@ -51,3 +51,15 @@ def test_sell_order_carries_its_own_pnl():
     t.place_order("b1", "AAA", "BUY", 5.0, 100.0, "S")
     sell = t.place_order("s1", "AAA", "SELL", 5.0, 120.0, "S")
     assert sell["pnl"] > 0 and sell["pnl_pct"] > 0
+
+
+def test_dashboard_trims_float_noise_and_collapses_extra_trades():
+    from scripts.render_status_page import qty
+
+    assert qty(0.011499999999999996) == "0.0115" and qty(2.0) == "2" and qty(1500.0) == "1,500"
+    t = _trader()
+    for i in range(5):
+        t.place_order(f"b{i}", "AAA", "BUY", 1.0, 100.0, "S")
+        t.place_order(f"s{i}", "AAA", "SELL", 1.0, 110.0, "S")
+    data = {**t.get_performance_metrics(), "positions": [], **history_view(t)}
+    assert "more closed trades" in market_card("US", "US Stocks", data)

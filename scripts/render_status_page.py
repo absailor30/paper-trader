@@ -30,93 +30,114 @@ def pct(n):
     return f"{'+' if n >= 0 else ''}{n:.2f}%"
 
 
+def _cls(n):
+    return "good" if n and n > 0 else ("bad" if n and n < 0 else "")
+
+
+def qty(q):
+    return f"{q:,.4f}".rstrip("0").rstrip(".") if q < 1000 else f"{q:,.0f}"
+
+
+def summary_tile(key, label, data):
+    ccy = CCY[key]
+    ret = data["total_return_pct"]
+    return (f"<div class='tile'><div class='tl'>{label}</div>"
+            f"<div class='tv'>{money(ccy, data['total_value'])} <span class='{_cls(ret)}'>{pct(ret)}</span></div>"
+            f"<div class='ts'>{len(data['positions'])} open &middot; realized "
+            f"<span class='{_cls(data.get('realized_pnl', 0.0))}'>{money(ccy, data.get('realized_pnl', 0.0))}</span></div></div>")
+
+
 def market_card(key, label, data):
     ccy = CCY[key]
     ret = data["total_return_pct"]
-    ret_class = "good" if ret > 0 else ("bad" if ret < 0 else "")
     rows = "".join(
-        f"<tr><td class='sym'>{p['symbol']}</td><td class='num'>{p['quantity']}</td>"
+        f"<tr><td class='sym'>{p['symbol']}</td><td class='num'>{qty(p['quantity'])}</td>"
         f"<td class='num'>{money(ccy, p['invested'])}</td>"
-        f"<td class='num'>{money(ccy, p['current_value'])}</td>"
-        f"<td class='num {'good' if p['unrealized_pnl'] > 0 else ('bad' if p['unrealized_pnl'] < 0 else '')}'>"
-        f"{money(ccy, p['unrealized_pnl'])} ({pct(p['unrealized_pnl_pct'])})</td></tr>"
+        f"<td class='num {_cls(p['unrealized_pnl'])}'>{money(ccy, p['unrealized_pnl'])} "
+        f"<span class='dim'>{pct(p['unrealized_pnl_pct'])}</span></td></tr>"
         for p in data["positions"]
-    ) or "<tr><td colspan='5' class='empty'>No open positions.</td></tr>"
-    closed_rows = "".join(
-        f"<tr><td>{_html.escape(t['exit_date'])}</td><td class='sym'>{_html.escape(t['symbol'])}</td>"
-        f"<td class='num'>{t['entry_price']:,.2f} → {t['exit_price']:,.2f}</td>"
-        f"<td class='num {'good' if t['pnl'] > 0 else ('bad' if t['pnl'] < 0 else '')}'>"
-        f"{money(ccy, t['pnl'])} ({pct(t['pnl_pct'])})</td>"
-        f"<td>{_html.escape(t['strategy'])}</td></tr>"
-        for t in data.get("closed_trades", [])
-    ) or "<tr><td colspan='5' class='empty'>No closed trades yet — nothing has been sold.</td></tr>"
+    ) or "<tr><td colspan='4' class='empty'>No open positions.</td></tr>"
+    closed = data.get("closed_trades", [])
+
+    def closed_row(t):
+        return (f"<tr><td>{_html.escape(t['exit_date'])}</td><td class='sym'>{_html.escape(t['symbol'])}</td>"
+                f"<td class='num'>{t['entry_price']:,.2f} → {t['exit_price']:,.2f}</td>"
+                f"<td class='num {_cls(t['pnl'])}'>{money(ccy, t['pnl'])} <span class='dim'>{pct(t['pnl_pct'])}</span></td>"
+                f"<td class='dim'>{_html.escape(t['strategy'])}</td></tr>")
+
+    closed_head = "<thead><tr><th>Sold</th><th>Symbol</th><th class='num'>Entry → Exit</th><th class='num'>Profit / loss</th><th>Strategy</th></tr></thead>"
+    closed_rows = "".join(closed_row(t) for t in closed[:3]) or \
+        "<tr><td colspan='5' class='empty'>No closed trades yet — nothing has been sold.</td></tr>"
+    more_closed = (f"<details><summary>{len(closed) - 3} more closed trades</summary><table>{closed_head}<tbody>"
+                   f"{''.join(closed_row(t) for t in closed[3:])}</tbody></table></details>") if len(closed) > 3 else ""
+    orders = data.get("recent_orders", [])
     order_rows = "".join(
         f"<tr><td>{_html.escape(o['time'])}</td><td>{_html.escape(o['side'])}</td>"
         f"<td class='sym'>{_html.escape(o['symbol'])}</td>"
-        f"<td class='num'>{o['quantity']} @ {o['price']:,.2f}</td>"
+        f"<td class='num'>{qty(o['quantity'])} @ {o['price']:,.2f}</td>"
         f"<td class='{'good' if o['status'] == 'FILLED' else 'bad'}'>{_html.escape(o['status'])}"
         f"{(' — ' + _html.escape(str(o['reason']))) if o['status'] != 'FILLED' and o['reason'] else ''}</td></tr>"
-        for o in data.get("recent_orders", [])
+        for o in orders
     ) or "<tr><td colspan='5' class='empty'>No orders yet.</td></tr>"
     realized = data.get("realized_pnl", 0.0)
-    realized_cls = "good" if realized > 0 else ("bad" if realized < 0 else "")
     return f"""
     <div class="card">
-      <h2>{label}</h2>
-      <div class="hero">
-        <div class="big">{money(ccy, data['total_value'])} <span class="{ret_class}">{pct(ret)}</span></div>
-        <div class="sub">cash {money(ccy, data['capital'])} &middot; in positions {money(ccy, data['positions_value'])}
-        &middot; {data['num_trades']} realized trades &middot; {data['win_rate']:.0f}% win rate</div>
-      </div>
+      <div class="head"><h2>{label}</h2>
+        <div class="big">{money(ccy, data['total_value'])} <span class="{_cls(ret)}">{pct(ret)}</span></div></div>
+      <div class="sub">cash {money(ccy, data['capital'])} &middot; invested {money(ccy, data['positions_value'])}
+        &middot; {data.get('num_closed', 0)} closed &middot; {data['win_rate']:.0f}% win</div>
       <table><thead><tr><th>Symbol</th><th class="num">Qty</th><th class="num">Invested</th>
-        <th class="num">Value Now</th><th class="num">Unrealized P&amp;L</th></tr></thead>
-        <tbody>{rows}</tbody></table>
-      <h3>Closed trades — realized <span class="{realized_cls}">{money(ccy, realized)}</span> over {data.get('num_closed', 0)} trades</h3>
-      <table><thead><tr><th>Sold</th><th>Symbol</th><th class="num">Entry → Exit</th>
-        <th class="num">Profit / loss</th><th>Strategy</th></tr></thead><tbody>{closed_rows}</tbody></table>
-      <h3>Recent orders (fills and rejections)</h3>
-      <table><thead><tr><th>Time</th><th>Side</th><th>Symbol</th><th class="num">Qty @ price</th>
-        <th>Status</th></tr></thead><tbody>{order_rows}</tbody></table>
+        <th class="num">Unrealized P&amp;L</th></tr></thead><tbody>{rows}</tbody></table>
+      <h3>Closed trades &mdash; realized <span class="{_cls(realized)}">{money(ccy, realized)}</span></h3>
+      <table>{closed_head}<tbody>{closed_rows}</tbody></table>{more_closed}
+      <details><summary>Recent orders ({len(orders)})</summary><table><thead><tr><th>Time</th><th>Side</th><th>Symbol</th>
+        <th class="num">Qty @ price</th><th>Status</th></tr></thead><tbody>{order_rows}</tbody></table></details>
     </div>"""
 
 
 def main():
     status = json.load(sys.stdin)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    cards = "".join(
-        market_card(k, label, status[k])
-        for k, label in [("CRYPTO", "Crypto — Binance spot"), ("US", "US Stocks"), ("INDIA", "India Stocks")]
-    ) + "".join(
-        market_card(k, f"Jev (AI decisions, own paper account) — {k}", data)
-        for k, data in status.get("JEV", {}).items()
-    )
+    accounts = [(k, label, status[k]) for k, label in
+                [("US", "US Stocks"), ("INDIA", "India Stocks"), ("CRYPTO", "Crypto — Binance spot")]]
+    accounts += [(k, f"Jev (AI) — {k}", data) for k, data in status.get("JEV", {}).items()]
+    tiles = "".join(summary_tile(*a) for a in accounts)
+    cards = "".join(market_card(*a) for a in accounts)
     html = f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Paper Trader Status</title>
 <style>
 :root{{color-scheme:dark light;--bg:#0b0f1a;--surface:#131a2b;--border:#252f47;
 --text:#e7ebf5;--dim:#a3adc4;--good:#3ddc84;--bad:#ff6b6b;--mono:ui-monospace,monospace}}
-body{{margin:0;background:var(--bg);color:var(--text);font:14px -apple-system,sans-serif;padding:24px 16px}}
-.wrap{{max-width:900px;margin:0 auto}}
-h1{{font-size:20px;margin:0 0 4px}}
-.asof{{color:var(--dim);font-family:var(--mono);font-size:12px;margin-bottom:20px}}
-.card{{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}}
-.card h2{{font-size:14px;margin:0 0 10px}}
-.card h3{{font-size:12.5px;margin:16px 0 6px;color:var(--dim)}}
-.hero{{margin-bottom:12px}}
-.big{{font-family:var(--mono);font-size:22px;font-weight:700}}
-.sub{{color:var(--dim);font-size:12px;margin-top:4px}}
-.good{{color:var(--good)}} .bad{{color:var(--bad)}}
-table{{width:100%;border-collapse:collapse;font-size:12.5px}}
-th{{text-align:left;color:var(--dim);font-weight:600;padding:0 6px 6px;border-bottom:1px solid var(--border)}}
-td{{padding:6px;border-bottom:1px solid var(--border)}}
+body{{margin:0;background:var(--bg);color:var(--text);font:13px -apple-system,sans-serif;padding:14px 16px}}
+.wrap{{max-width:1500px;margin:0 auto}}
+h1{{font-size:17px;margin:0}}
+.asof{{color:var(--dim);font-family:var(--mono);font-size:11px;margin:2px 0 10px}}
+.tiles{{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;margin-bottom:10px}}
+.tile{{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px}}
+.tl{{color:var(--dim);font-size:11px}} .tv{{font-family:var(--mono);font-size:16px;font-weight:700;margin:2px 0}}
+.ts{{color:var(--dim);font-size:11px}}
+.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:10px;align-items:start}}
+.card{{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px}}
+.head{{display:flex;justify-content:space-between;align-items:baseline;gap:8px}}
+.card h2{{font-size:13px;margin:0}}
+.card h3{{font-size:11.5px;margin:10px 0 4px;color:var(--dim)}}
+.big{{font-family:var(--mono);font-size:15px;font-weight:700}}
+.sub{{color:var(--dim);font-size:11px;margin:2px 0 6px}}
+.good{{color:var(--good)}} .bad{{color:var(--bad)}} .dim{{color:var(--dim)}}
+table{{width:100%;border-collapse:collapse;font-size:11.5px}}
+th{{text-align:left;color:var(--dim);font-weight:600;padding:0 4px 3px;border-bottom:1px solid var(--border)}}
+td{{padding:3px 4px;border-bottom:1px solid var(--border)}}
 .num,th.num{{text-align:right;font-family:var(--mono)}}
 .sym{{font-family:var(--mono);font-weight:700}}
-.empty{{color:var(--dim);text-align:center;padding:16px}}
+.empty{{color:var(--dim);text-align:center;padding:6px}}
+details{{margin-top:6px}} summary{{cursor:pointer;color:var(--dim);font-size:11.5px}}
+@media(max-width:480px){{.grid{{grid-template-columns:1fr}}}}
 </style></head><body><div class="wrap">
 <h1>Paper Trader — Status</h1>
 <div class="asof">Last updated {now} · published by GitHub Actions, no Claude session required</div>
-{cards}
+<div class="tiles">{tiles}</div>
+<div class="grid">{cards}</div>
 </div></body></html>"""
     out = Path("public")
     out.mkdir(exist_ok=True)
