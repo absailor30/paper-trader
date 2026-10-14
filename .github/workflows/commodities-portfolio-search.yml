@@ -1,0 +1,19 @@
+name: Commodities portfolio search
+
+# Manual-only, read-only backtests (no DB, no orders): rotation, vol-scaled Donchian, Keltner.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run Commodities portfolio search
+        run: PYTHONPATH=. python -u scripts/commodities_portfolio_search.py
