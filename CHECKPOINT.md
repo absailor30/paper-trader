@@ -65,6 +65,12 @@ State of play, shortest honest version:
    actual numbers, not a chat narration; nothing is promoted to live without
    an explicit ask and a real-data result behind it.
 
+## Trade history + why India has no buys (2026-10-14)
+
+- **Project goal (user, 2026-10-14):** a mostly self-running trading system, not millions, just something; the **small budget is deliberate** (the user cannot put in $10K) so the point is to see how the system behaves at ~$100 (US/crypto) and Rs10,000 (India). Do not "fix" it by assuming a bigger account. Known cost of the small account: US is fully invested, so later signals get skipped for lack of cash.
+- **Trade journal:** every account card on the GitHub Pages dashboard now shows **closed trades with realized profit/loss** (entry -> exit, P&L and %, strategy), total realized P&L, and **recent orders including rejections** (`paper_trader/history.py`, wired into `get_status` and `jev_status`). SELL orders now carry `pnl`/`pnl_pct` and the Telegram sell alert says **PROFIT/LOSS after costs**. 6 tests. Earlier "no history" was partly true: before this, the page showed only open positions and counts.
+- **India has no buys because nothing qualifies, verified on real data 2026-10-13 (manual `india-momentum-check.yml`):** 0/15 stocks meet the live rule (126-day return >= +10% AND close > SMA50). 13 of 15 have a NEGATIVE 126-day return (-2% to -17%; e.g. RELIANCE -13%, INFY -16%, MARUTI -17%); the only positive ones are ICICIBANK +3.8% and SUNPHARMA +7.3%, both under 10% and below their SMA50. The Indian large caps are in a 6-month downtrend and this long-only trend rule correctly stays in cash. All five stocks cycles since go-live (Oct 6-10) returned `INDIA: []`, consistent. Therefore India has **no sells and no P&L history because it has made no trades**, not because of a bug. Long-only means no profit available in a falling market; that is a property of the strategy, not a defect.
+
 ## Jev now MAKES trading decisions, in its own paper accounts (2026-10-10)
 
 User decision: let Jev (TypeSafe's decision model) decide buy / sell / hold. Implemented as `paper_trader/jev_trader.py` (`python run.py jev-trade --markets US,INDIA,CRYPTO`; manual `jev-trade.yml`; also runs as a `continue-on-error` step after the daily stocks and crypto cycles).
