@@ -80,7 +80,7 @@ def report(df, label):
           f"median {100 * df['ret'].median():+.2f}%")
     if len(df) < 15:
         return
-    rho = df["conf"].corr(df["ret"], method="spearman")
+    rho = df["conf"].rank().corr(df["ret"].rank())  # Spearman = Pearson on ranks (no scipy needed)
     print(f"    Spearman(confidence, return) = {rho:+.3f}   (0 = no relation; +ve = higher confidence did better)")
     df = df.assign(bucket=pd.qcut(df["conf"], 3, labels=["low third", "middle third", "high third"], duplicates="drop"))
     for b, g in df.groupby("bucket", observed=True):
