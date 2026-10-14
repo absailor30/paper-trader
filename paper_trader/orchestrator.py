@@ -18,6 +18,7 @@ from paper_trader import jev
 from paper_trader.config import settings
 from paper_trader.data.fetcher import DataFetcher
 from paper_trader.execution.paper_trader import PaperTrader
+from paper_trader.history import history_view
 from paper_trader.notify import notify_circuit_breaker, notify_fetch_failure, notify_order
 from paper_trader.strategy.base import Position
 from paper_trader.strategy.donchian_breakout import DonchianBreakoutStrategy
@@ -411,7 +412,7 @@ class TradingBot:
                 "stop_loss": p.get("stop_loss"),
                 "take_profit": p.get("take_profit"),
             })
-        return {"market": market, **metrics, "positions": positions}
+        return {"market": market, **metrics, "positions": positions, **history_view(trader)}
 
     def _save(self, market: str):
         self.traders[market].save(f"{market.lower()}_portfolio")

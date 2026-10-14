@@ -28,6 +28,7 @@ from paper_trader.config import settings
 from paper_trader.data.binance_fetcher import BinanceFetcher
 from paper_trader.data.fetcher import DataFetcher
 from paper_trader.execution.paper_trader import PaperTrader
+from paper_trader.history import history_view
 from paper_trader.notify import notify_circuit_breaker, notify_order
 from paper_trader.orchestrator import _floor4, size_position
 from paper_trader.persistence.state_store import load_state, save_state
@@ -240,5 +241,5 @@ def jev_status(markets: List[str]) -> Dict[str, Any]:
                 "unrealized_pnl": (p["current_price"] - p["entry_price"]) * p["quantity"],
                 "unrealized_pnl_pct": (p["current_price"] / p["entry_price"] - 1) * 100 if p["entry_price"] else 0.0,
             })
-        out[market] = {**trader.get_performance_metrics(), "positions": positions}
+        out[market] = {**trader.get_performance_metrics(), "positions": positions, **history_view(trader)}
     return out

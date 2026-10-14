@@ -43,6 +43,9 @@ def notify_order(market: str, order: dict) -> None:
     lines = [f"{emoji} <b>{status}</b> {side} {symbol} ({market})"]
     if qty is not None and price is not None:
         lines.append(f"{qty} @ ${price:,.2f}")
+    if status == "FILLED" and side == "SELL" and order.get("pnl") is not None:
+        word = "PROFIT" if order["pnl"] > 0 else ("LOSS" if order["pnl"] < 0 else "BREAKEVEN")
+        lines.append(f"{word}: {order['pnl']:+,.2f} ({order['pnl_pct']:+.2f}%) after costs")
     if status == "REJECTED" and order.get("reason"):
         lines.append(f"Reason: {order['reason']}")
     elif order.get("reasoning"):

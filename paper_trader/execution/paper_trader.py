@@ -110,6 +110,8 @@ class PaperTrader:
                 net_proceeds = gross_proceeds - commission
                 cost_basis = position["entry_price"] * quantity
                 net_pnl = net_proceeds - cost_basis
+                order["pnl"] = net_pnl
+                order["pnl_pct"] = (net_pnl / cost_basis * 100) if cost_basis > 0 else 0.0
 
                 self.portfolio.capital += net_proceeds
                 self.portfolio.daily_pnl += net_pnl

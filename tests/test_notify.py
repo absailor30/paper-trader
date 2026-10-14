@@ -85,3 +85,14 @@ def test_notify_shadow_says_not_executed():
         notify_shadow("Momentum_126d_ret10_sma50", "BUY", "TCS", 2075.0, "126d return 12%")
     text = mock_send.call_args[0][0]
     assert "SHADOW BUY" in text and "TCS" in text and "NOT executed" in text
+
+
+def test_sell_notification_states_profit_or_loss():
+    win = {"status": "FILLED", "side": "SELL", "symbol": "AAPL", "quantity": 1, "price": 120.0,
+           "reasoning": "exit", "pnl": 19.5, "pnl_pct": 19.5}
+    loss = dict(win, pnl=-8.0, pnl_pct=-8.0)
+    with patch("paper_trader.notify.send_telegram_message") as mock_send:
+        notify_order("US", win)
+        notify_order("US", loss)
+    assert "PROFIT: +19.50" in mock_send.call_args_list[0][0][0]
+    assert "LOSS: -8.00" in mock_send.call_args_list[1][0][0]

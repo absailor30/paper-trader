@@ -26,6 +26,7 @@ from paper_trader import jev
 from paper_trader.config import settings
 from paper_trader.data.binance_fetcher import BinanceFetcher
 from paper_trader.execution.paper_trader import PaperTrader
+from paper_trader.history import history_view
 from paper_trader.notify import notify_circuit_breaker, notify_fetch_failure, notify_order
 from paper_trader.strategy.base import Position
 from paper_trader.strategy.donchian_breakout import DonchianBreakoutStrategy
@@ -261,7 +262,7 @@ class CryptoTradingBot:
                 "stop_loss": p.get("stop_loss"),
                 "take_profit": p.get("take_profit"),
             })
-        return {"market": "CRYPTO", **metrics, "positions": positions}
+        return {"market": "CRYPTO", **metrics, "positions": positions, **history_view(self.trader)}
 
     def _save(self):
         self.trader.save("crypto_portfolio")

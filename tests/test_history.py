@@ -1,0 +1,53 @@
+from paper_trader.config import settings
+from paper_trader.execution.paper_trader import PaperTrader
+from paper_trader.history import history_view
+from scripts.render_status_page import market_card
+
+
+def _trader():
+    return PaperTrader(1000.0, settings.commission_rate, settings.slippage_rate)
+
+
+def test_closed_trade_shows_realized_profit_and_orders_newest_first():
+    t = _trader()
+    t.place_order("b1", "AAA", "BUY", 5.0, 100.0, "S")
+    t.place_order("s1", "AAA", "SELL", 5.0, 120.0, "S", reasoning="exit")
+    v = history_view(t)
+    assert v["num_closed"] == 1 and v["realized_pnl"] > 0
+    trade = v["closed_trades"][0]
+    assert trade["symbol"] == "AAA" and trade["pnl"] > 0 and trade["pnl_pct"] > 0
+    assert [o["side"] for o in v["recent_orders"]] == ["SELL", "BUY"]
+    assert v["avg_win"] > 0 and v["avg_loss"] is None
+
+
+def test_loss_and_rejected_order_are_visible():
+    t = _trader()
+    t.place_order("b1", "AAA", "BUY", 5.0, 100.0, "S")
+    t.place_order("s1", "AAA", "SELL", 5.0, 80.0, "S")
+    t.place_order("b2", "BBB", "BUY", 999.0, 100.0, "S")  # cannot afford
+    v = history_view(t)
+    assert v["realized_pnl"] < 0 and v["avg_loss"] < 0
+    assert v["recent_orders"][0]["status"] == "REJECTED" and v["recent_orders"][0]["reason"] == "Insufficient capital"
+
+
+def test_empty_history_is_explicit():
+    v = history_view(_trader())
+    assert v["closed_trades"] == [] and v["recent_orders"] == [] and v["num_closed"] == 0
+
+
+def test_dashboard_card_renders_trade_history():
+    t = _trader()
+    t.place_order("b1", "AAA", "BUY", 5.0, 100.0, "S")
+    t.place_order("s1", "AAA", "SELL", 5.0, 120.0, "S")
+    data = {**t.get_performance_metrics(), "positions": [], **history_view(t)}
+    html = market_card("US", "US Stocks", data)
+    assert "Closed trades" in html and "AAA" in html and "FILLED" in html
+    empty = market_card("US", "US Stocks", {**_trader().get_performance_metrics(), "positions": [], **history_view(_trader())})
+    assert "nothing has been sold" in empty
+
+
+def test_sell_order_carries_its_own_pnl():
+    t = _trader()
+    t.place_order("b1", "AAA", "BUY", 5.0, 100.0, "S")
+    sell = t.place_order("s1", "AAA", "SELL", 5.0, 120.0, "S")
+    assert sell["pnl"] > 0 and sell["pnl_pct"] > 0

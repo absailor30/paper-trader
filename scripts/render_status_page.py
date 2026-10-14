@@ -8,6 +8,7 @@ unreliable).
 
 Usage: python run.py status | python scripts/render_status_page.py
 """
+import html as _html
 import json
 import sys
 from datetime import datetime, timezone
@@ -41,6 +42,24 @@ def market_card(key, label, data):
         f"{money(ccy, p['unrealized_pnl'])} ({pct(p['unrealized_pnl_pct'])})</td></tr>"
         for p in data["positions"]
     ) or "<tr><td colspan='5' class='empty'>No open positions.</td></tr>"
+    closed_rows = "".join(
+        f"<tr><td>{_html.escape(t['exit_date'])}</td><td class='sym'>{_html.escape(t['symbol'])}</td>"
+        f"<td class='num'>{t['entry_price']:,.2f} → {t['exit_price']:,.2f}</td>"
+        f"<td class='num {'good' if t['pnl'] > 0 else ('bad' if t['pnl'] < 0 else '')}'>"
+        f"{money(ccy, t['pnl'])} ({pct(t['pnl_pct'])})</td>"
+        f"<td>{_html.escape(t['strategy'])}</td></tr>"
+        for t in data.get("closed_trades", [])
+    ) or "<tr><td colspan='5' class='empty'>No closed trades yet — nothing has been sold.</td></tr>"
+    order_rows = "".join(
+        f"<tr><td>{_html.escape(o['time'])}</td><td>{_html.escape(o['side'])}</td>"
+        f"<td class='sym'>{_html.escape(o['symbol'])}</td>"
+        f"<td class='num'>{o['quantity']} @ {o['price']:,.2f}</td>"
+        f"<td class='{'good' if o['status'] == 'FILLED' else 'bad'}'>{_html.escape(o['status'])}"
+        f"{(' — ' + _html.escape(str(o['reason']))) if o['status'] != 'FILLED' and o['reason'] else ''}</td></tr>"
+        for o in data.get("recent_orders", [])
+    ) or "<tr><td colspan='5' class='empty'>No orders yet.</td></tr>"
+    realized = data.get("realized_pnl", 0.0)
+    realized_cls = "good" if realized > 0 else ("bad" if realized < 0 else "")
     return f"""
     <div class="card">
       <h2>{label}</h2>
@@ -52,6 +71,12 @@ def market_card(key, label, data):
       <table><thead><tr><th>Symbol</th><th class="num">Qty</th><th class="num">Invested</th>
         <th class="num">Value Now</th><th class="num">Unrealized P&amp;L</th></tr></thead>
         <tbody>{rows}</tbody></table>
+      <h3>Closed trades — realized <span class="{realized_cls}">{money(ccy, realized)}</span> over {data.get('num_closed', 0)} trades</h3>
+      <table><thead><tr><th>Sold</th><th>Symbol</th><th class="num">Entry → Exit</th>
+        <th class="num">Profit / loss</th><th>Strategy</th></tr></thead><tbody>{closed_rows}</tbody></table>
+      <h3>Recent orders (fills and rejections)</h3>
+      <table><thead><tr><th>Time</th><th>Side</th><th>Symbol</th><th class="num">Qty @ price</th>
+        <th>Status</th></tr></thead><tbody>{order_rows}</tbody></table>
     </div>"""
 
 
@@ -77,6 +102,7 @@ h1{{font-size:20px;margin:0 0 4px}}
 .asof{{color:var(--dim);font-family:var(--mono);font-size:12px;margin-bottom:20px}}
 .card{{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}}
 .card h2{{font-size:14px;margin:0 0 10px}}
+.card h3{{font-size:12.5px;margin:16px 0 6px;color:var(--dim)}}
 .hero{{margin-bottom:12px}}
 .big{{font-family:var(--mono);font-size:22px;font-weight:700}}
 .sub{{color:var(--dim);font-size:12px;margin-top:4px}}
