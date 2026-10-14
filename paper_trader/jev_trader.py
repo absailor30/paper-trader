@@ -202,7 +202,7 @@ class JevTrader:
                     break
                 price, bar_date = float(df["close"].iloc[-1]), str(df.index[-1].date())
                 conf = blend(rule_confidence(df).score, p)
-                qty = size_position(trader, price, india=cfg["india"], confidence=conf)
+                qty = size_position(trader, price, india=cfg["india"], confidence=conf, market=market)
                 if qty <= 0 or qty * price < settings.min_position_value:
                     continue
                 atr_now = atr(df["high"], df["low"], df["close"], settings.atr_period).iloc[-1]

@@ -23,7 +23,7 @@ from typing import List, Optional
 from loguru import logger
 
 from paper_trader import jev
-from paper_trader.confidence import rule_confidence, size_fraction
+from paper_trader.confidence import position_pct, rule_confidence
 from paper_trader.config import settings
 from paper_trader.data.binance_fetcher import BinanceFetcher
 from paper_trader.execution.paper_trader import PaperTrader
@@ -67,7 +67,7 @@ class CryptoTradingBot:
         # no "minimum-viable share" fallback to worry about.
         portfolio_value = self.trader.portfolio.total_value
         available_cash = self.trader.portfolio.capital
-        target = portfolio_value * settings.max_position_size * size_fraction(confidence)
+        target = portfolio_value * position_pct(confidence, "CRYPTO")
         allocated = min(target, available_cash)
 
         if price <= 0 or allocated < settings.min_position_value:

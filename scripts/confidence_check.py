@@ -11,7 +11,7 @@ import pandas as pd
 from loguru import logger
 
 from paper_trader.config import settings
-from paper_trader.confidence import rule_confidence, size_fraction
+from paper_trader.confidence import position_pct, rule_confidence
 from paper_trader.data.binance_fetcher import BinanceFetcher
 from paper_trader.data.fetcher import DataFetcher
 from paper_trader.strategy.base import Position
@@ -86,7 +86,7 @@ def report(df, label):
     for b, g in df.groupby("bucket", observed=True):
         print(f"    {b:13s} conf {g['conf'].min():.2f}-{g['conf'].max():.2f}  n={len(g):4d}  win {100 * (g['ret'] > 0).mean():5.1f}%  "
               f"avg {100 * g['ret'].mean():+6.2f}%  median {100 * g['ret'].median():+6.2f}%")
-    f = df["conf"].map(size_fraction)
+    f = pd.Series([position_pct(c, m) for c, m in zip(df["conf"], df["market"])], index=df.index)
     kept = df[f > 0]
     flat = kept["ret"].mean()
     weighted = (kept["ret"] * f[kept.index]).sum() / f[kept.index].sum() if len(kept) else float("nan")

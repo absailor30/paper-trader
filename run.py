@@ -136,7 +136,7 @@ def main():
         data = bot.fetcher.fetch_many(symbols, start_date=(datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d"), india=cfg["india"])
         prices = {s: float(df["close"].iloc[-1]) for s, df in data.items() if not df.empty}
         confs = {s: rule_confidence(df).score for s, df in data.items() if not df.empty}
-        result = rebalance.plan(trader, prices, confs, india=cfg["india"])
+        result = rebalance.plan(trader, prices, confs, india=cfg["india"], market=args.market)
         result["executed"] = []
         if args.execute:
             result["executed"] = rebalance.execute(trader, result, f"{args.market} rebalance")

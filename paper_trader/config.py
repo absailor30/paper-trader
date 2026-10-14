@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     max_drawdown: float = 0.15            # total circuit breaker
     concentration_ceiling: float = 0.20   # hard cap on one position when a whole share (India) must exceed the 12% target
     confidence_min: float = 0.30          # below this confidence a strategy signal is skipped (see confidence.py)
-    confidence_floor_fraction: float = 0.35  # at confidence_min a position gets this share of max_position_size
+    confidence_max_size: float = 0.15     # top of the size ramp, only used where confidence has shown signal (crypto); see confidence.py
 
     # Strategy parameters (trend following)
     fast_sma: int = 50

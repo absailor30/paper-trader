@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from paper_trader.config import settings
-from paper_trader.confidence import blend, rule_confidence, size_fraction
+from paper_trader.confidence import blend, position_pct, rule_confidence
 from paper_trader.execution.paper_trader import PaperTrader
 from paper_trader.orchestrator import size_position
 from tests.conftest import _make_ohlcv
@@ -31,12 +31,31 @@ def test_too_little_history_is_neutral():
     assert rule_confidence(_make_ohlcv(np.linspace(100, 110, 10), "X")).score == 0.5
 
 
-def test_size_fraction_scales_between_floor_and_full_and_skips_below_min():
-    assert size_fraction(None) == 1.0
-    assert size_fraction(1.0) == pytest.approx(1.0)
-    assert size_fraction(settings.confidence_min) == pytest.approx(settings.confidence_floor_fraction)
-    assert size_fraction(settings.confidence_min - 0.01) == 0.0
-    assert size_fraction(0.5) < size_fraction(0.8)
+def test_ramp_hits_the_agreed_anchor_points_in_crypto():
+    assert position_pct(0.30, "CRYPTO") == pytest.approx(0.05)
+    assert position_pct(0.55, "CRYPTO") == pytest.approx(0.10)
+    assert position_pct(0.70, "CRYPTO") == pytest.approx(settings.max_position_size)
+    assert position_pct(0.90, "CRYPTO") == pytest.approx(settings.max_position_size)
+    assert position_pct(1.00, "CRYPTO") == pytest.approx(settings.confidence_max_size) == pytest.approx(0.15)
+
+
+def test_ramp_is_smooth_and_never_decreasing():
+    grid = [position_pct(x / 100, "CRYPTO") for x in range(30, 101)]
+    assert all(b >= a - 1e-12 for a, b in zip(grid, grid[1:]))
+    assert max(b - a for a, b in zip(grid, grid[1:])) < 0.01  # no cliffs between neighbouring scores
+
+
+def test_below_minimum_confidence_is_skipped_in_every_market():
+    for m in ("US", "INDIA", "CRYPTO"):
+        assert position_pct(settings.confidence_min - 0.01, m) == 0.0
+
+
+def test_us_is_flat_india_is_down_only_crypto_gets_the_full_ramp():
+    base = settings.max_position_size
+    assert position_pct(0.4, "US") == position_pct(0.95, "US") == base
+    assert position_pct(0.95, "INDIA") == base and position_pct(0.4, "INDIA") < base
+    assert position_pct(1.0, "CRYPTO") > base > position_pct(0.4, "CRYPTO")
+    assert position_pct(None, "CRYPTO") == base
 
 
 def test_blend_uses_jev_when_available():
@@ -52,14 +71,14 @@ def test_expensive_us_stock_gets_12_percent_not_half_the_account():
 
 def test_higher_confidence_buys_more():
     t = _trader(100.0)
-    low = size_position(t, 50.0, confidence=0.4)
-    high = size_position(t, 50.0, confidence=0.95)
+    low = size_position(t, 50.0, confidence=0.4, market="CRYPTO")
+    high = size_position(t, 50.0, confidence=0.95, market="CRYPTO")
     assert 0 < low < high
-    assert high * 50.0 <= 100.0 * settings.max_position_size + 0.05
+    assert high * 50.0 <= 100.0 * settings.confidence_max_size + 0.05
 
 
 def test_below_minimum_confidence_skips():
-    assert size_position(_trader(100.0), 50.0, confidence=settings.confidence_min - 0.05) == 0.0
+    assert size_position(_trader(100.0), 50.0, confidence=settings.confidence_min - 0.05, market="CRYPTO") == 0.0
 
 
 def test_india_one_share_only_if_under_ceiling():

@@ -69,6 +69,6 @@ def test_low_confidence_is_floored_not_closed():
     t = _live_like_us_account()
     p = rebalance.plan(t, PRICES, {"QQQ": 0.0, "MSFT": 0.0, "AAPL": 0.0, "PG": 0.0})
     for r in p["rows"]:
-        assert r["size_fraction"] == pytest.approx(settings.confidence_floor_fraction)
+        assert r["target_pct"] == pytest.approx(0.05)  # the bottom of the ramp, never zero
     rebalance.execute(t, p, "US rebalance", day="2026-10-15")
     assert set(t.portfolio.positions) == {"QQQ", "MSFT", "AAPL", "PG"}

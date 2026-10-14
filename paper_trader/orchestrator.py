@@ -15,7 +15,7 @@ from typing import List, Optional
 from loguru import logger
 
 from paper_trader import jev
-from paper_trader.confidence import rule_confidence, size_fraction
+from paper_trader.confidence import position_pct, rule_confidence
 from paper_trader.config import settings
 from paper_trader.data.fetcher import DataFetcher
 from paper_trader.execution.paper_trader import PaperTrader
@@ -41,9 +41,10 @@ def _floor4(shares: float) -> float:
     return math.floor(shares * 10_000) / 10_000
 
 
-def size_position(trader: PaperTrader, price: float, india: bool = False, confidence: Optional[float] = None) -> float:
-    """Units to buy. Base size is max_position_size (12%) of the portfolio, scaled by
-    confidence (see confidence.py; None = full size). US/crypto are bought fractionally AT
+def size_position(trader: PaperTrader, price: float, india: bool = False, confidence: Optional[float] = None,
+                  market: str = "US") -> float:
+    """Units to buy. Size is position_pct(confidence, market) of the portfolio
+    (see confidence.py: 12% base, smooth 5%..15% ramp by confidence where history supports it). US/crypto are bought fractionally AT
     that size: an expensive stock simply means a small fraction of a share. (The old
     "size up to the concentration ceiling" fallback let AMD/QQQ/MSFT each take ~half of a
     $100 account and left cents for later signals -- removed.) India fills whole shares
@@ -54,7 +55,7 @@ def size_position(trader: PaperTrader, price: float, india: bool = False, confid
 
     portfolio_value = trader.portfolio.total_value
     available_cash = trader.portfolio.capital
-    target = portfolio_value * settings.max_position_size * size_fraction(confidence)
+    target = portfolio_value * position_pct(confidence, market)
     allocated = min(target, available_cash)
 
     # A real production run bought 0.0001 shares of PG (~$0.015) because
@@ -130,8 +131,9 @@ class TradingBot:
             return False
         return True
 
-    def _position_size(self, trader: PaperTrader, price: float, india: bool = False, confidence: Optional[float] = None) -> float:
-        return size_position(trader, price, india, confidence)
+    def _position_size(self, trader: PaperTrader, price: float, india: bool = False, confidence: Optional[float] = None,
+                       market: str = "US") -> float:
+        return size_position(trader, price, india, confidence, market)
 
     def run_market_cycle(self, market: str) -> List[dict]:
         cfg = MARKETS[market]
@@ -208,7 +210,7 @@ class TradingBot:
             jev.observe(market, symbol, strategy.name, signal, df)  # log-only, never affects the trade
 
             conf = rule_confidence(df)
-            qty = self._position_size(trader, signal.price, india=cfg["india"], confidence=conf.score)
+            qty = self._position_size(trader, signal.price, india=cfg["india"], confidence=conf.score, market=market)
             if qty <= 0:
                 logger.info(f"{market} {symbol}: signal skipped, {conf.explain()}, position size 0")
                 continue
@@ -274,7 +276,7 @@ class TradingBot:
             return {"action": "SKIPPED", "reason": "no signal"}
 
         conf = rule_confidence(df)
-        qty = self._position_size(trader, signal.price, india=cfg["india"], confidence=conf.score)
+        qty = self._position_size(trader, signal.price, india=cfg["india"], confidence=conf.score, market=market)
         if qty <= 0:
             return {"action": "SKIPPED", "reason": "position size is 0"}
         signal.reasoning = f"{signal.reasoning} | {conf.explain()}"

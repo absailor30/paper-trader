@@ -9,9 +9,14 @@ entries -- the validated strategies still decide WHAT to buy).
     strength : where close sits inside its last-20-day high/low range, 0..1
     calm     : 1 at ATR <= 1% of price, falling to 0 at ATR >= 6% of price
 
-Size = settings.max_position_size * size_fraction(score): below
-settings.confidence_min the trade is skipped; at 1.0 it gets the full 12%;
-in between it scales linearly from settings.confidence_floor_fraction of 12%.
+Position size (share of the portfolio) comes from a smooth ramp, not steps:
+    0.30 -> 5%,  0.55 -> 10%,  0.70 -> 12%,  0.90 -> 12%,  1.00 -> 15%     (below 0.30: skip)
+which is the user's tier idea (30-50% -> 5%, 50-60% -> 10%, 60-89% -> 12%, 90%+ -> up to
+15%) with the cliffs removed and the top capped at 15% instead of 20%. How much of the ramp
+each market may use follows what real history showed (scripts/confidence_check.py):
+    CRYPTO : full ramp (the score predicted outcomes there: rho +0.12, win 37% -> 53%)
+    INDIA  : ramp but never above the 12% base (weak evidence)
+    US     : flat 12% (the score did NOT predict outcomes there; it was slightly inverted)
 The weights are judgement, not fitted: scripts/confidence_check.py measures
 on real history whether higher scores actually preceded better trades.
 """
@@ -74,12 +79,29 @@ def blend(rule: float, jev_p: Optional[float]) -> float:
     return rule if jev_p is None else 0.5 * rule + 0.5 * jev_p
 
 
-def size_fraction(confidence: Optional[float]) -> float:
-    """Share of the base position size (max_position_size) that this confidence earns; 0 = skip."""
+def _ramp(confidence: float) -> float:
+    knots = [(0.30, 0.05), (0.55, 0.10), (0.70, settings.max_position_size),
+             (0.90, settings.max_position_size), (1.00, settings.confidence_max_size)]
+    if confidence <= knots[0][0]:
+        return knots[0][1]
+    for (x0, y0), (x1, y1) in zip(knots, knots[1:]):
+        if confidence <= x1:
+            return y0 + (y1 - y0) * (confidence - x0) / (x1 - x0)
+    return knots[-1][1]
+
+
+MARKET_POLICY = {"CRYPTO": "ramp", "INDIA": "down_only", "US": "flat"}
+
+
+def position_pct(confidence: Optional[float], market: str = "US") -> float:
+    """Share of the portfolio to put in one new position; 0.0 = skip. confidence=None means full base size."""
+    base = settings.max_position_size
     if confidence is None:
-        return 1.0
+        return base
     if confidence < settings.confidence_min:
         return 0.0
-    span = max(1e-9, 1 - settings.confidence_min)
-    floor = settings.confidence_floor_fraction
-    return min(1.0, floor + (1 - floor) * (confidence - settings.confidence_min) / span)
+    policy = MARKET_POLICY.get(market, "down_only")
+    if policy == "flat":
+        return base
+    pct = _ramp(confidence)
+    return min(pct, base) if policy == "down_only" else pct
