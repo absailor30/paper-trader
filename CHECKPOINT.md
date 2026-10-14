@@ -79,6 +79,25 @@ Replaces the earlier linear 35%..100% scaling. Position = share of the portfolio
 
 **Commodities:** GLD, SLV, USO, UNG were part of the early combined 42-symbol backtests (US + India + commodities, [OLD] standard) but were never broken out or analysed on their own, and are not traded live (`MARKETS` is US + INDIA; crypto runs separately). No commodity-specific verdict exists.
 
+## Commodities search (2026-10-15)
+
+Real data (yfinance, 2016-09 to 2026-10, 2,533 bars each), `scripts/commodities_search.py` via manual `commodities-search.yml`. Funds: configured GLD, SLV, USO, UNG plus DBC, DBA, CPER, PPLT added only for sample size. Same split as the India/crypto searches: earlier years vs last 3 years, per-fund 10,000, 12% position, costs included. **Nothing added live.**
+
+| Variant | Earlier yrs: avg ret / median PF | Last 3 yrs: avg ret / median PF / funds profitable / trades |
+|---|---|---|
+| Donchian 20/10 + SMA100 (current US rule) | +2.20% / 1.24 | -0.39% / 1.00 / 4 of 8 / 148 |
+| Donchian 20/10, no filter | +1.61% / 1.15 | -0.15% / 1.03 / 4 of 8 / 162 |
+| **Donchian 55/20, no filter** | +1.69% / 1.32 | **+2.58% / 1.57 / 5 of 8 / 91** (only variant positive in both periods) |
+| Donchian 10/5 | -2.15% / 0.94 | +1.90% / 1.13 / 5 of 8 / 245 |
+| Momentum 126d/10%/SMA50 (India rule) | +2.06% / 0.94 | +2.08% / 1.31 / 6 of 8 / 162 |
+| RSI dip-buying | -0.18% / 1.12 | -0.29% / 1.35 / 5 of 8 / 52 |
+
+Buy-and-hold per fund: +18.6% earlier years, **+67.9% last 3 years**. Even at the same 12% exposure that is ~+8.2% over the last 3 years versus the best rule's +2.58%, so the rules did NOT beat simply holding commodities recently.
+
+Last 3 years per fund (Donchian 55/20, return/trades): SLV +11.9%/14, GLD +4.6%/17, USO +4.5%/6, PPLT +4.2%/13, DBC +0.9%/11, DBA -0.1%/12, UNG -2.5%/5, CPER -3.0%/13. Momentum: GLD +8.4%, SLV +8.0%, USO +2.5%, rest ~0, UNG -4.0%. **The result is carried by precious metals (silver/gold/platinum) during their big run, not a general commodity edge.**
+
+**Verdict:** do not add commodities live. The current US rule (20/10 + SMA100) earned about nothing on commodities in the last 3 years, so commodities should not simply be added to the US universe. Donchian 55/20 passes the screen (positive in both periods, 91 last-3-year trades) so it is a candidate for a propose-only shadow trial, but 8 funds x 6 variants = multiple-comparison risk, precious metals do the work, and the $100 US account is already ~60% cash. Low priority.
+
 ## Trade history + why India has no buys (2026-10-14)
 
 - **Project goal (user, 2026-10-14):** a mostly self-running trading system, not millions, just something; the **small budget is deliberate** (the user cannot put in $10K) so the point is to see how the system behaves at ~$100 (US/crypto) and Rs10,000 (India). Do not "fix" it by assuming a bigger account. Known cost of the small account: US is fully invested, so later signals get skipped for lack of cash.
