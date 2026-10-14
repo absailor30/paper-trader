@@ -17,6 +17,8 @@ CLI entry point.
     python run.py rotation --universe india
     python run.py crypto         # one crypto paper-trading cycle (propose-only unless AUTO_EXECUTE=true)
     python run.py crypto --loop --interval-hours 24   # run cycles forever, sleeping between them
+    python run.py rebalance --market US [--execute]   # one-off: resize held positions to confidence-scaled 12% slices
+                                  # (dry-run unless --execute; never closes a position)
     python run.py shadow-india   # propose-only run of the India momentum candidate; never executes,
                                   # keeps its own hypothetical ledger (see paper_trader/shadow.py)
     python run.py shadow-crypto  # propose-only run of crypto Donchian 20/10; never executes
@@ -33,7 +35,7 @@ import time
 from loguru import logger
 
 from paper_trader.config import settings
-from paper_trader.orchestrator import TradingBot
+from paper_trader.orchestrator import MARKETS, TradingBot
 from paper_trader.crypto_orchestrator import CryptoTradingBot
 
 
@@ -73,6 +75,9 @@ def main():
 
     sub.add_parser("status")
     sub.add_parser("shadow-india")
+    rebalance_parser = sub.add_parser("rebalance")
+    rebalance_parser.add_argument("--market", choices=["US", "INDIA"], default="US")
+    rebalance_parser.add_argument("--execute", action="store_true")
     sub.add_parser("shadow-crypto")
     sub.add_parser("jev-report")
     jev_trade_parser = sub.add_parser("jev-trade")
@@ -117,6 +122,27 @@ def main():
         logger.info(f"AUTO_EXECUTE={settings.auto_execute}")
         bot = TradingBot()
         result = bot.retry_entry(args.market, args.symbol)
+        print(json.dumps(result, indent=2, default=str))
+        return
+
+    if args.command == "rebalance":
+        from datetime import datetime, timedelta
+        from paper_trader import rebalance
+        from paper_trader.confidence import rule_confidence
+        bot = TradingBot()
+        cfg = MARKETS[args.market]
+        trader = bot.traders[args.market]
+        symbols = list(trader.portfolio.positions)
+        data = bot.fetcher.fetch_many(symbols, start_date=(datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d"), india=cfg["india"])
+        prices = {s: float(df["close"].iloc[-1]) for s, df in data.items() if not df.empty}
+        confs = {s: rule_confidence(df).score for s, df in data.items() if not df.empty}
+        result = rebalance.plan(trader, prices, confs, india=cfg["india"])
+        result["executed"] = []
+        if args.execute:
+            result["executed"] = rebalance.execute(trader, result, f"{args.market} rebalance")
+            bot._save(args.market)
+            result["cash_after"] = trader.portfolio.capital
+            result["portfolio_value_after"] = trader.portfolio.total_value
         print(json.dumps(result, indent=2, default=str))
         return
 

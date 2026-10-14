@@ -10,11 +10,12 @@ expectancy for the strategy against real data.
 """
 import math
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 
 from loguru import logger
 
 from paper_trader import jev
+from paper_trader.confidence import rule_confidence, size_fraction
 from paper_trader.config import settings
 from paper_trader.data.fetcher import DataFetcher
 from paper_trader.execution.paper_trader import PaperTrader
@@ -40,18 +41,20 @@ def _floor4(shares: float) -> float:
     return math.floor(shares * 10_000) / 10_000
 
 
-def size_position(trader: PaperTrader, price: float, india: bool = False) -> float:
-    # NSE/BSE brokers only fill whole shares -- no fractional trading
-    # in India, unlike US brokers (Alpaca, Schwab, etc.) which do.
-    # This is a real, permanent market-structure difference, not a
-    # config knob: `india` forces every quantity below to a whole
-    # number for that market, while US sizing stays fractional.
+def size_position(trader: PaperTrader, price: float, india: bool = False, confidence: Optional[float] = None) -> float:
+    """Units to buy. Base size is max_position_size (12%) of the portfolio, scaled by
+    confidence (see confidence.py; None = full size). US/crypto are bought fractionally AT
+    that size: an expensive stock simply means a small fraction of a share. (The old
+    "size up to the concentration ceiling" fallback let AMD/QQQ/MSFT each take ~half of a
+    $100 account and left cents for later signals -- removed.) India fills whole shares
+    only, so when one share costs more than the target it buys exactly 1 share if that
+    stays under settings.concentration_ceiling, else skips."""
     if price <= 0:
         return 0.0
 
     portfolio_value = trader.portfolio.total_value
     available_cash = trader.portfolio.capital
-    target = portfolio_value * settings.max_position_size
+    target = portfolio_value * settings.max_position_size * size_fraction(confidence)
     allocated = min(target, available_cash)
 
     # A real production run bought 0.0001 shares of PG (~$0.015) because
@@ -64,46 +67,26 @@ def size_position(trader: PaperTrader, price: float, india: bool = False) -> flo
         )
         return 0.0
 
-    # place_order fills BUYs at price*(1+slippage_rate) and adds
-    # commission on top of that -- sizing off raw `price` alone
-    # budgets less than the real total_cost, so a trade sized right at
-    # the edge of available cash spuriously gets REJECTED downstream
-    # (seen for real: QQQ sized to fit $49.90 cash, then rejected
-    # needing $50.00 once slippage+commission were applied). Same bug
-    # class as the rotation-backtest capital-rejection fix -- reserve
-    # the same headroom here.
+    # place_order fills BUYs at price*(1+slippage_rate) and adds commission on top, so size
+    # off the effective price or a trade sized right at the edge of cash gets REJECTED
+    # (seen for real: QQQ sized to fit $49.90 cash, then rejected needing $50.00).
     effective_price = price * (1 + trader.slippage_rate) * (1 + trader.commission_rate)
-
     shares = allocated / effective_price
-    if shares >= 1 or portfolio_value < 1:
-        return math.floor(shares) if india else _floor4(shares)
 
-    # Target allocation alone can't afford even 1 share (e.g. a $500+
-    # stock against a small account's 12% target). For the US, where
-    # fractional shares are supported end-to-end (place_order takes
-    # qty as-is, no int rounding), size up to the hard concentration
-    # ceiling instead of forcing a whole share: requiring a full share
-    # here would spend far more than the target risk budget, or (as
-    # found from a real production run where a real signal was
-    # silently dropped) skip a real signal outright even though the
-    # account could easily afford a fractional position. For India,
-    # a whole share below the ceiling is the best this account can
-    # do -- there is no smaller unit to fall back to.
-    ceiling_allocated = min(portfolio_value * settings.concentration_ceiling, available_cash)
-    ceiling_shares = ceiling_allocated / effective_price
-
-    if india:
-        whole_shares = math.floor(ceiling_shares)
-        if whole_shares >= 1:
-            return float(whole_shares)
-        logger.warning(f"Position skipped: price {price} exceeds available cash for even 1 whole share (India)")
+    if not india:
+        floored = _floor4(shares)
+        if floored > 0:
+            return floored
+        logger.warning(f"Position skipped: price {price} exceeds available cash")
         return 0.0
 
-    floored = _floor4(ceiling_shares)
-    if floored > 0:
-        return floored
-
-    logger.warning(f"Position skipped: price {price} exceeds available cash")
+    whole = math.floor(shares)
+    if whole >= 1:
+        return float(whole)
+    ceiling_allocated = min(portfolio_value * settings.concentration_ceiling, available_cash)
+    if ceiling_allocated / effective_price >= 1:
+        return 1.0
+    logger.warning(f"Position skipped: price {price} exceeds the {settings.concentration_ceiling:.0%} ceiling for even 1 whole share (India)")
     return 0.0
 
 
@@ -147,8 +130,8 @@ class TradingBot:
             return False
         return True
 
-    def _position_size(self, trader: PaperTrader, price: float, india: bool = False) -> float:
-        return size_position(trader, price, india)
+    def _position_size(self, trader: PaperTrader, price: float, india: bool = False, confidence: Optional[float] = None) -> float:
+        return size_position(trader, price, india, confidence)
 
     def run_market_cycle(self, market: str) -> List[dict]:
         cfg = MARKETS[market]
@@ -224,9 +207,12 @@ class TradingBot:
                 continue
             jev.observe(market, symbol, strategy.name, signal, df)  # log-only, never affects the trade
 
-            qty = self._position_size(trader, signal.price, india=cfg["india"])
+            conf = rule_confidence(df)
+            qty = self._position_size(trader, signal.price, india=cfg["india"], confidence=conf.score)
             if qty <= 0:
+                logger.info(f"{market} {symbol}: signal skipped, {conf.explain()}, position size 0")
                 continue
+            signal.reasoning = f"{signal.reasoning} | {conf.explain()}"
 
             client_order_id = f"{symbol}:{strategy.name}:{today}:BUY"
             if settings.auto_execute:
@@ -287,9 +273,11 @@ class TradingBot:
         if signal is None:
             return {"action": "SKIPPED", "reason": "no signal"}
 
-        qty = self._position_size(trader, signal.price, india=cfg["india"])
+        conf = rule_confidence(df)
+        qty = self._position_size(trader, signal.price, india=cfg["india"], confidence=conf.score)
         if qty <= 0:
             return {"action": "SKIPPED", "reason": "position size is 0"}
+        signal.reasoning = f"{signal.reasoning} | {conf.explain()}"
 
         base = f"{symbol}:{strategy.name}:{today}:BUY"
         attempt = 1

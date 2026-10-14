@@ -30,7 +30,8 @@ from paper_trader.data.fetcher import DataFetcher
 from paper_trader.execution.paper_trader import PaperTrader
 from paper_trader.history import history_view
 from paper_trader.notify import notify_circuit_breaker, notify_order
-from paper_trader.orchestrator import _floor4, size_position
+from paper_trader.confidence import blend, rule_confidence
+from paper_trader.orchestrator import size_position
 from paper_trader.persistence.state_store import load_state, save_state
 from paper_trader.shadow import _completed_bars
 from paper_trader.strategy.indicators import atr, donchian_high, rsi, sma
@@ -200,10 +201,8 @@ class JevTrader:
                 if len(trader.portfolio.positions) >= settings.jev_max_positions:
                     break
                 price, bar_date = float(df["close"].iloc[-1]), str(df.index[-1].date())
-                qty = size_position(trader, price, india=cfg["india"])
-                if not cfg["india"]:
-                    conf = min(1.0, (p - settings.jev_buy_threshold) / max(1e-9, 1 - settings.jev_buy_threshold))
-                    qty = _floor4(qty * (0.5 + 0.5 * conf))
+                conf = blend(rule_confidence(df).score, p)
+                qty = size_position(trader, price, india=cfg["india"], confidence=conf)
                 if qty <= 0 or qty * price < settings.min_position_value:
                     continue
                 atr_now = atr(df["high"], df["low"], df["close"], settings.atr_period).iloc[-1]
@@ -211,7 +210,7 @@ class JevTrader:
                 if stop <= 0 or stop >= price:
                     stop = price * 0.85
                 record(symbol, bar_date, "buy", p, True)
-                execute(symbol, "BUY", qty, price, bar_date, f"Jev p(open)={p:.2f}", stop=stop)
+                execute(symbol, "BUY", qty, price, bar_date, f"Jev p(open)={p:.2f}, blended confidence {conf:.2f}", stop=stop)
 
         log["decisions"] = log["decisions"][-LOG_CAP:]
         save_state(LOG_KEY, log)

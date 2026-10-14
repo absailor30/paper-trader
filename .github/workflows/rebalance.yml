@@ -1,0 +1,38 @@
+name: Rebalance
+
+# Manual one-off: resize held positions to confidence-scaled slices of the 12% base size.
+# execute=false (default) only prints the plan; execute=true places the paper orders.
+on:
+  workflow_dispatch:
+    inputs:
+      market:
+        description: "US or INDIA"
+        required: false
+        default: "US"
+      execute:
+        description: "true to actually place the orders (default: dry run)"
+        required: false
+        default: "false"
+
+jobs:
+  rebalance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Rebalance
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ "${{ inputs.execute }}" = "true" ]; then
+            python run.py rebalance --market "${{ inputs.market }}" --execute
+          else
+            python run.py rebalance --market "${{ inputs.market }}"
+          fi

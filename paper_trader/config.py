@@ -76,7 +76,9 @@ class Settings(BaseSettings):
                                           # buy was 0.0001 sh = $0.015); same floor live and in the backtest engine
     max_daily_loss: float = 0.04          # daily circuit breaker
     max_drawdown: float = 0.15            # total circuit breaker
-    concentration_ceiling: float = 0.5    # hard cap on a single minimum-viable order
+    concentration_ceiling: float = 0.20   # hard cap on one position when a whole share (India) must exceed the 12% target
+    confidence_min: float = 0.30          # below this confidence a strategy signal is skipped (see confidence.py)
+    confidence_floor_fraction: float = 0.35  # at confidence_min a position gets this share of max_position_size
 
     # Strategy parameters (trend following)
     fast_sma: int = 50

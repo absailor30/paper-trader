@@ -18,11 +18,12 @@ the daily client_order_id dedup below still caps this to one decision per
 symbol per calendar day -- this is a daily-bar strategy, not a scalper.
 """
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 
 from loguru import logger
 
 from paper_trader import jev
+from paper_trader.confidence import rule_confidence, size_fraction
 from paper_trader.config import settings
 from paper_trader.data.binance_fetcher import BinanceFetcher
 from paper_trader.execution.paper_trader import PaperTrader
@@ -60,13 +61,13 @@ class CryptoTradingBot:
             return False
         return True
 
-    def _position_size(self, price: float) -> float:
+    def _position_size(self, price: float, confidence: Optional[float] = None) -> float:
         # Crypto sizes purely fractionally (no integer-share constraint like
         # India), so unlike the stock orchestrator's _position_size there is
         # no "minimum-viable share" fallback to worry about.
         portfolio_value = self.trader.portfolio.total_value
         available_cash = self.trader.portfolio.capital
-        target = portfolio_value * settings.max_position_size
+        target = portfolio_value * settings.max_position_size * size_fraction(confidence)
         allocated = min(target, available_cash)
 
         if price <= 0 or allocated < settings.min_position_value:
@@ -140,9 +141,12 @@ class CryptoTradingBot:
                 continue
             jev.observe("CRYPTO", symbol, self.strategy.name, signal, df)  # log-only, never affects the trade
 
-            qty = self._position_size(signal.price)
+            conf = rule_confidence(df)
+            qty = self._position_size(signal.price, confidence=conf.score)
             if qty <= 0:
+                logger.info(f"CRYPTO {symbol}: signal skipped, {conf.explain()}, position size 0")
                 continue
+            signal.reasoning = f"{signal.reasoning} | {conf.explain()}"
 
             client_order_id = f"{symbol}:{self.strategy.name}:{today}:BUY"
             if settings.auto_execute:

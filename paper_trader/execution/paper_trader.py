@@ -88,16 +88,31 @@ class PaperTrader:
                 logger.warning(f"Insufficient capital for {symbol}: need {total_cost:.2f}, have {self.portfolio.capital:.2f}")
             else:
                 self.portfolio.capital -= total_cost
-                self.portfolio.positions[symbol] = {
-                    "quantity": quantity,
-                    "entry_price": effective_price,
-                    "current_price": effective_price,
-                    "highest_price": effective_price,
-                    "entry_time": datetime.now().isoformat(),
-                    "strategy": strategy,
-                    "stop_loss": stop_loss,
-                    "take_profit": take_profit,
-                }
+                held = self.portfolio.positions.get(symbol)
+                if held:
+                    # Adding to an existing position: sum the quantity and keep a
+                    # weighted-average entry price instead of overwriting the old lot
+                    # (which would silently drop the shares already held).
+                    total_qty = held["quantity"] + quantity
+                    held["entry_price"] = (held["entry_price"] * held["quantity"] + effective_price * quantity) / total_qty
+                    held["quantity"] = total_qty
+                    held["current_price"] = effective_price
+                    held["highest_price"] = max(held.get("highest_price", effective_price), effective_price)
+                    if stop_loss is not None:
+                        held["stop_loss"] = stop_loss
+                    if take_profit is not None:
+                        held["take_profit"] = take_profit
+                else:
+                    self.portfolio.positions[symbol] = {
+                        "quantity": quantity,
+                        "entry_price": effective_price,
+                        "current_price": effective_price,
+                        "highest_price": effective_price,
+                        "entry_time": datetime.now().isoformat(),
+                        "strategy": strategy,
+                        "stop_loss": stop_loss,
+                        "take_profit": take_profit,
+                    }
 
         elif side == "SELL":
             position = self.portfolio.positions.get(symbol)
