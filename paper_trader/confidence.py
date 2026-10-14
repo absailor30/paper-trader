@@ -17,6 +17,7 @@ each market may use follows what real history showed (scripts/confidence_check.p
     CRYPTO : full ramp (the score predicted outcomes there: rho +0.12, win 37% -> 53%)
     INDIA  : ramp but never above the 12% base (weak evidence)
     US     : flat 12% (the score did NOT predict outcomes there; it was slightly inverted)
+    COMMODITIES : flat 12% (the rotation rule was validated at flat 12%; confidence untested there)
 The weights are judgement, not fitted: scripts/confidence_check.py measures
 on real history whether higher scores actually preceded better trades.
 """
@@ -90,7 +91,7 @@ def _ramp(confidence: float) -> float:
     return knots[-1][1]
 
 
-MARKET_POLICY = {"CRYPTO": "ramp", "INDIA": "down_only", "US": "flat"}
+MARKET_POLICY = {"CRYPTO": "ramp", "INDIA": "down_only", "US": "flat", "COMMODITIES": "flat"}
 
 
 def position_pct(confidence: Optional[float], market: str = "US") -> float:

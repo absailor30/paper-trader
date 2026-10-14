@@ -14,7 +14,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-CCY = {"CRYPTO": "$", "US": "$", "INDIA": "₹"}
+CCY = {"CRYPTO": "$", "US": "$", "INDIA": "₹", "COMMODITIES": "$"}
 
 
 def money(ccy, n):
@@ -99,7 +99,8 @@ def main():
     status = json.load(sys.stdin)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     accounts = [(k, label, status[k]) for k, label in
-                [("US", "US Stocks"), ("INDIA", "India Stocks"), ("CRYPTO", "Crypto — Binance spot")]]
+                [("US", "US Stocks"), ("INDIA", "India Stocks"), ("CRYPTO", "Crypto — Binance spot"),
+                 ("COMMODITIES", "Commodities — rotation top 3")] if k in status]
     accounts += [(k, f"Jev (AI) — {k}", data) for k, data in status.get("JEV", {}).items()]
     tiles = "".join(summary_tile(*a) for a in accounts)
     cards = "".join(market_card(*a) for a in accounts)

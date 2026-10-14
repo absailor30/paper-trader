@@ -73,6 +73,7 @@ def main():
     retry_parser.add_argument("--market", choices=["US", "INDIA"], required=True)
     retry_parser.add_argument("--symbol", required=True)
 
+    sub.add_parser("commodities")
     sub.add_parser("status")
     sub.add_parser("shadow-india")
     rebalance_parser = sub.add_parser("rebalance")
@@ -166,9 +167,18 @@ def main():
         print(json.dumps(jev.report(), indent=2, default=str))
         return
 
+    if args.command == "commodities":
+        from paper_trader.commodities_orchestrator import CommoditiesBot
+        logger.info(f"AUTO_EXECUTE={settings.auto_execute}")
+        print(json.dumps(CommoditiesBot().run_cycle(), indent=2, default=str))
+        return
+
     if args.command == "status":
+        from paper_trader.commodities_orchestrator import CommoditiesBot
         stock_bot = TradingBot()
         crypto_bot = CryptoTradingBot()
+        commodities_bot = CommoditiesBot()
+        commodities_bot.mark_to_market()
         stop_actions = stock_bot.check_all_stops_only()
         crypto_stop_actions = crypto_bot.check_stops_only()
         from paper_trader.jev_trader import jev_status
@@ -177,6 +187,7 @@ def main():
             "US": {**stock_bot.get_status("US"), "stop_actions": stop_actions["US"]},
             "INDIA": {**stock_bot.get_status("INDIA"), "stop_actions": stop_actions["INDIA"]},
             "CRYPTO": {**crypto_bot.get_status(), "stop_actions": crypto_stop_actions},
+            "COMMODITIES": commodities_bot.get_status(),
         }
         print(json.dumps(result, indent=2, default=str))
         return
