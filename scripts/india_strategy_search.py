@@ -106,6 +106,7 @@ def evaluate(label: str = "INDIA") -> None:
         print(f"  {v}: OOS avg ret {ret:+.2f}%, OOS median PF {pf:.2f}")
     if not candidates:
         print("  NONE")
+    return results
 
 
 def main() -> None:
