@@ -62,13 +62,20 @@ class Settings(BaseSettings):
 
     # Commodity ETFs (not raw futures contracts like GC=F/CL=F, which have
     # periodic contract rollover gaps that distort a daily-bar SMA/RSI
-    # backtest). These track spot price continuously, same as an equity.
+    # backtest). These track the price like an equity. Fixed list of 8 (user's
+    # choice 2026-10-15): precious metals held as the metal (gold, silver,
+    # platinum, palladium, plus the 4-metal basket), copper, and two oil funds.
     commodities: List[str] = [
         "GLD",   # SPDR Gold Trust
         "SLV",   # iShares Silver Trust
+        "PPLT",  # abrdn Physical Platinum
+        "PALL",  # abrdn Physical Palladium
+        "GLTR",  # abrdn Precious Metals Basket (gold, silver, platinum, palladium)
+        "CPER",  # United States Copper Index Fund
         "USO",   # United States Oil Fund (WTI crude)
-        "UNG",   # United States Natural Gas Fund
+        "BNO",   # United States Brent Oil Fund
     ]
+    commodities_capital: float = 100.0   # separate paper account, funded like the others (small on purpose)
 
     # Risk parameters
     max_position_size: float = 0.12       # max 12% of portfolio per position
