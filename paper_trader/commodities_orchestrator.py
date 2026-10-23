@@ -58,6 +58,7 @@ class CommoditiesBot:
         if not data:
             return actions
         self.trader.update_prices({s: float(df["close"].iloc[-1]) for s, df in data.items() if not df.empty})
+        self._stamp(data)
 
         close = pd.DataFrame({s: df["close"] for s, df in data.items()}).sort_index().ffill(limit=3)
         decision_bar = last_month_end(close.index)
@@ -118,7 +119,16 @@ class CommoditiesBot:
         prices = {s: float(df["close"].iloc[-1]) for s, df in data.items() if not df.empty}
         if prices:
             self.trader.update_prices(prices)
+            self._stamp(data)
             self._save()
+
+    def _stamp(self, data: dict) -> None:
+        """Record the newest price bar date actually used, so the dashboard can show how fresh prices are."""
+        dates = [str(df.index[-1].date()) for df in data.values() if not df.empty]
+        if dates:
+            self.meta["prices_as_of"] = max(dates)
+            logger.info(f"COMMODITIES: latest price bar {self.meta['prices_as_of']}")
+            save_state(META_KEY, self.meta)
 
     def get_status(self) -> dict:
         metrics = self.trader.get_performance_metrics()
@@ -132,7 +142,7 @@ class CommoditiesBot:
                 "unrealized_pnl_pct": (p["current_price"] / p["entry_price"] - 1) * 100 if p["entry_price"] else 0.0,
             })
         return {"market": "COMMODITIES", **metrics, "positions": positions, **history_view(self.trader),
-                "last_rebalance": self.meta.get("last_rebalance")}
+                "last_rebalance": self.meta.get("last_rebalance"), "prices_as_of": self.meta.get("prices_as_of")}
 
     def _save(self):
         self.trader.save(STATE_KEY)

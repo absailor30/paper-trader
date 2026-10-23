@@ -52,12 +52,14 @@ def market_card(key, label, data):
     ret = data["total_return_pct"]
     rows = "".join(
         f"<tr><td class='sym'>{p['symbol']}</td><td class='num'>{qty(p['quantity'])}</td>"
-        f"<td class='num'>{money(ccy, p['invested'])}</td>"
+        f"<td class='num'>{p['entry_price']:,.2f} → <b>{p['current_price']:,.2f}</b></td>"
+        f"<td class='num'>{money(ccy, p['current_value'])}</td>"
         f"<td class='num {_cls(p['unrealized_pnl'])}'>{money(ccy, p['unrealized_pnl'])} "
         f"<span class='dim'>{pct(p['unrealized_pnl_pct'])}</span></td></tr>"
         for p in data["positions"]
-    ) or "<tr><td colspan='4' class='empty'>No open positions.</td></tr>"
+    ) or "<tr><td colspan='5' class='empty'>No open positions.</td></tr>"
     closed = data.get("closed_trades", [])
+    asof = f" &middot; prices as of {_html.escape(str(data['prices_as_of']))}" if data.get("prices_as_of") else ""
 
     def closed_row(t):
         return (f"<tr><td>{_html.escape(t['exit_date'])}</td><td class='sym'>{_html.escape(t['symbol'])}</td>"
@@ -85,9 +87,9 @@ def market_card(key, label, data):
       <div class="head"><h2>{label}</h2>
         <div class="big">{money(ccy, data['total_value'])} <span class="{_cls(ret)}">{pct(ret)}</span></div></div>
       <div class="sub">cash {money(ccy, data['capital'])} &middot; invested {money(ccy, data['positions_value'])}
-        &middot; {data.get('num_closed', 0)} closed &middot; {data['win_rate']:.0f}% win</div>
-      <table><thead><tr><th>Symbol</th><th class="num">Qty</th><th class="num">Invested</th>
-        <th class="num">Unrealized P&amp;L</th></tr></thead><tbody>{rows}</tbody></table>
+        &middot; {data.get('num_closed', 0)} closed &middot; {data['win_rate']:.0f}% win{asof}</div>
+      <table><thead><tr><th>Symbol</th><th class="num">Qty</th><th class="num">Entry → Now</th>
+        <th class="num">Value</th><th class="num">Unrealized P&amp;L</th></tr></thead><tbody>{rows}</tbody></table>
       <h3>Closed trades &mdash; realized <span class="{_cls(realized)}">{money(ccy, realized)}</span></h3>
       <table>{closed_head}<tbody>{closed_rows}</tbody></table>{more_closed}
       <details><summary>Recent orders ({len(orders)})</summary><table><thead><tr><th>Time</th><th>Side</th><th>Symbol</th>

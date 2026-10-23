@@ -63,3 +63,15 @@ def test_dashboard_trims_float_noise_and_collapses_extra_trades():
         t.place_order(f"s{i}", "AAA", "SELL", 1.0, 110.0, "S")
     data = {**t.get_performance_metrics(), "positions": [], **history_view(t)}
     assert "more closed trades" in market_card("US", "US Stocks", data)
+
+
+def test_open_position_row_shows_current_price():
+    t = _trader()
+    t.place_order("b1", "AAA", "BUY", 5.0, 100.0, "S")
+    t.update_prices({"AAA": 123.45})
+    pos = t.portfolio.positions["AAA"]
+    row = {"symbol": "AAA", "quantity": 5.0, "entry_price": pos["entry_price"], "current_price": 123.45,
+           "invested": pos["entry_price"] * 5, "current_value": 123.45 * 5,
+           "unrealized_pnl": (123.45 - pos["entry_price"]) * 5, "unrealized_pnl_pct": 23.0}
+    html = market_card("US", "US Stocks", {**t.get_performance_metrics(), "positions": [row], **history_view(t)})
+    assert "123.45" in html and "Entry → Now" in html

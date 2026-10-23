@@ -113,3 +113,15 @@ def test_status_shape_for_dashboard(monkeypatch):
     bot.run_cycle()
     s = bot.get_status()
     assert s["market"] == "COMMODITIES" and len(s["positions"]) == 2 and s["last_rebalance"] == "2026-09"
+
+
+def test_status_reports_price_bar_date_and_it_advances(monkeypatch):
+    monkeypatch.setattr(settings, "auto_execute", True)
+    bot = CommoditiesBot(FakeFetcher(_close(end="2026-10-14")))
+    bot.run_cycle()
+    assert bot.get_status()["prices_as_of"] == "2026-10-14"
+    bot2 = CommoditiesBot(FakeFetcher(_close(end="2026-10-16", n=332)))
+    bot2.mark_to_market()
+    st = bot2.get_status()
+    assert st["prices_as_of"] == "2026-10-16"
+    assert st["positions"][0]["current_price"] == pytest.approx(float(_close(end="2026-10-16", n=332)[st["positions"][0]["symbol"]].iloc[-1]))
