@@ -97,6 +97,34 @@ def market_card(key, label, data):
     </div>"""
 
 
+def watch_section(watch):
+    if not watch or not watch.get("markets"):
+        return ""
+    labels = {"US": "US Stocks", "INDIA": "India Stocks", "CRYPTO": "Crypto", "COMMODITIES": "Commodities"}
+    blocks = []
+    for key, block in watch["markets"].items():
+        ccy = CCY.get(key, "$")
+
+        def cell(v):
+            return "<td class='num dim'>—</td>" if v is None else f"<td class='num {_cls(v)}'>{pct(v)}</td>"
+
+        rows = "".join(
+            f"<tr><td class='sym'>{'★ ' if r['held'] else ''}{_html.escape(r['symbol'])}</td>"
+            f"<td class='num'>{ccy}{r['price']:,.2f}</td>{cell(r['d1'])}{cell(r['d5'])}"
+            f"<td class='sig {'good' if r['signal'] in ('BREAKOUT', 'QUALIFIES') or r['signal'].startswith('in today') else 'dim'}'>"
+            f"{_html.escape(r['signal'])}</td></tr>"
+            for r in block["rows"]
+        ) or "<tr><td colspan='5' class='empty'>No data this run.</td></tr>"
+        blocks.append(
+            f"<div class='card'><div class='head'><h2>{labels.get(key, key)}</h2>"
+            f"<span class='dim'>bars to {_html.escape(str(block.get('as_of')))}</span></div>"
+            f"<table><thead><tr><th>Symbol (★ held)</th><th class='num'>Price</th><th class='num'>1d</th>"
+            f"<th class='num'>5d</th><th>Rule status</th></tr></thead><tbody>{rows}</tbody></table></div>")
+    return (f"<h1 class='sec'>Market watch &mdash; every symbol, held or not "
+            f"<span class='dim'>(refreshed {_html.escape(str(watch.get('generated')))})</span></h1>"
+            f"<div class='grid'>{''.join(blocks)}</div>")
+
+
 def main():
     status = json.load(sys.stdin)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -104,6 +132,7 @@ def main():
                 [("US", "US Stocks"), ("INDIA", "India Stocks"), ("CRYPTO", "Crypto — Binance spot"),
                  ("COMMODITIES", "Commodities — rotation top 3")] if k in status]
     accounts += [(k, f"Jev (AI) — {k}", data) for k, data in status.get("JEV", {}).items()]
+    watch_html = watch_section(status.get("WATCH"))
     tiles = "".join(summary_tile(*a) for a in accounts)
     cards = "".join(market_card(*a) for a in accounts)
     html = f"""<!doctype html><html><head><meta charset="utf-8">
@@ -135,12 +164,15 @@ td{{padding:3px 4px;border-bottom:1px solid var(--border)}}
 .sym{{font-family:var(--mono);font-weight:700}}
 .empty{{color:var(--dim);text-align:center;padding:6px}}
 details{{margin-top:6px}} summary{{cursor:pointer;color:var(--dim);font-size:11.5px}}
+h1.sec{{font-size:14px;margin:18px 0 8px}}
+.sig{{font-size:11px}}
 @media(max-width:480px){{.grid{{grid-template-columns:1fr}}}}
 </style></head><body><div class="wrap">
 <h1>Paper Trader — Status</h1>
 <div class="asof">Last updated {now} · published by GitHub Actions, no Claude session required</div>
 <div class="tiles">{tiles}</div>
 <div class="grid">{cards}</div>
+{watch_html}
 </div></body></html>"""
     out = Path("public")
     out.mkdir(exist_ok=True)

@@ -1,0 +1,27 @@
+name: Market watch
+
+# Read-only: fetches every symbol in every universe (US, India, crypto, commodities), saves the table
+# the dashboard shows, and sends one Telegram digest per day. Never places an order.
+on:
+  schedule:
+    - cron: "25 22 * * *"        # daily, after the US close: saves + Telegram digest
+    - cron: "25 4,10,16 * * *"   # intraday refreshes: save only
+  workflow_dispatch: {}
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Refresh market watch
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python run.py watch ${{ github.event.schedule == '25 22 * * *' && '--digest' || '' }}

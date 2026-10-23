@@ -74,6 +74,8 @@ def main():
     retry_parser.add_argument("--symbol", required=True)
 
     sub.add_parser("commodities")
+    watch_parser = sub.add_parser("watch")
+    watch_parser.add_argument("--digest", action="store_true", help="also send the daily Telegram summary")
     sub.add_parser("status")
     sub.add_parser("shadow-india")
     rebalance_parser = sub.add_parser("rebalance")
@@ -167,6 +169,12 @@ def main():
         print(json.dumps(jev.report(), indent=2, default=str))
         return
 
+    if args.command == "watch":
+        from paper_trader.watch import run as run_watch
+        watch = run_watch(digest=args.digest)
+        print(json.dumps({m: len(b["rows"]) for m, b in watch["markets"].items()}))
+        return
+
     if args.command == "commodities":
         from paper_trader.commodities_orchestrator import CommoditiesBot
         logger.info(f"AUTO_EXECUTE={settings.auto_execute}")
@@ -174,6 +182,7 @@ def main():
         return
 
     if args.command == "status":
+        from paper_trader.persistence.state_store import load_state
         from paper_trader.commodities_orchestrator import CommoditiesBot
         stock_bot = TradingBot()
         crypto_bot = CryptoTradingBot()
@@ -188,6 +197,7 @@ def main():
             "INDIA": {**stock_bot.get_status("INDIA"), "stop_actions": stop_actions["INDIA"]},
             "CRYPTO": {**crypto_bot.get_status(), "stop_actions": crypto_stop_actions},
             "COMMODITIES": commodities_bot.get_status(),
+            "WATCH": load_state("market_watch"),
         }
         print(json.dumps(result, indent=2, default=str))
         return
