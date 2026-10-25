@@ -71,6 +71,48 @@ def check(name, env, base, models):
             print("error body:", r.text[:300])
 
 
+WANT = ("nemotron", "llama-3.3", "llama-3.1-405", "llama-4", "gpt-oss", "deepseek", "qwen", "mistral", "kimi", "glm", "minimax")
+SKIP = ("embed", "safety", "guard", "reward", "parse", "rerank", "vl", "vision", "clip", "retriev", "translate", "nvclip", "audio", "asr", "tts", "-4b", "-1b", "-8b")
+TOOL = {"type": "function", "function": {"name": "get_close", "description": "Latest closing price of a ticker",
+                                         "parameters": {"type": "object", "properties": {"ticker": {"type": "string"}}, "required": ["ticker"]}}}
+
+
+def candidate_models(ids):
+    return [i for i in ids if any(w in i.lower() for w in WANT) and not any(w in i.lower() for w in SKIP)]
+
+
+def probe_tools(base, headers, model, timeout=150):
+    """One request with a tool attached (TradingAgents binds tools to every analyst). Returns (status, called_tool, seconds)."""
+    t0 = time.time()
+    try:
+        r = requests.post(f"{base}/chat/completions", headers=headers, timeout=timeout, json={
+            "model": model, "max_tokens": 600, "temperature": 0.1, "tools": [TOOL], "tool_choice": "auto",
+            "messages": [{"role": "user", "content": "What is the latest close of GLD? Use the tool."}]})
+    except requests.exceptions.RequestException as e:
+        return type(e).__name__, False, time.time() - t0
+    called = False
+    if r.ok:
+        try:
+            called = bool(r.json()["choices"][0]["message"].get("tool_calls"))
+        except Exception:
+            pass
+    return r.status_code, called, time.time() - t0
+
+
+def probe_nvidia():
+    key = os.environ.get("NVIDIA_API_KEY", "")
+    if not key:
+        return
+    base, h = PROVIDERS["NVIDIA"][1], {"Authorization": f"Bearer {key}"}
+    ids = [m["id"] for m in requests.get(f"{base}/models", headers=h, timeout=30).json().get("data", [])]
+    print(f"\nNVIDIA catalog ({len(ids)} ids): {sorted(ids)}")
+    print("\n=== tool-calling probe (status, called_tool, seconds) ===")
+    for m in candidate_models(ids)[:30]:
+        st, called, dt = probe_tools(base, h, m)
+        print(f"{m:55s} {st!s:>6} tool_call={'YES' if called else 'no '} {dt:5.1f}s")
+
+
 if __name__ == "__main__":
     for n, (e, b, m) in PROVIDERS.items():
         check(n, e, b, m)
+    probe_nvidia()
