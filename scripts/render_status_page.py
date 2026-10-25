@@ -120,9 +120,23 @@ def watch_section(watch):
             f"<span class='dim'>bars to {_html.escape(str(block.get('as_of')))}</span></div>"
             f"<table><thead><tr><th>Symbol (★ held)</th><th class='num'>Price</th><th class='num'>1d</th>"
             f"<th class='num'>5d</th><th>Rule status</th></tr></thead><tbody>{rows}</tbody></table></div>")
+    sb = watch.get("scoreboard") or {}
+    def sb_row(k, v):
+        pos = "—" if v["pct_positive"] is None else "%.0f%%" % v["pct_positive"]
+        age = "—" if v["avg_days"] is None else "%.0fd" % v["avg_days"]
+        return (f"<tr><td class='sym'>{labels.get(k, k)}</td><td class='num'>{v['signals']}</td>"
+                f"<td class='num {_cls(v['avg_ret'])}'>{pct(v['avg_ret'])}</td>"
+                f"<td class='num'>{pos}</td><td class='num'>{age}</td></tr>")
+
+    sb_rows = "".join(sb_row(k, v) for k, v in sb.items())
+    scoreboard_html = (
+        "<div class='card'><div class='head'><h2>Signal scoreboard (forward results since each signal fired)</h2></div>"
+        "<table><thead><tr><th>Market</th><th class='num'>Signals</th><th class='num'>Avg return since</th>"
+        "<th class='num'>% positive</th><th class='num'>Avg age</th></tr></thead>"
+        f"<tbody>{sb_rows}</tbody></table></div>") if sb else ""
     return (f"<h1 class='sec'>Market watch &mdash; every symbol, held or not "
             f"<span class='dim'>(refreshed {_html.escape(str(watch.get('generated')))})</span></h1>"
-            f"<div class='grid'>{''.join(blocks)}</div>")
+            f"<div class='grid'>{scoreboard_html}{''.join(blocks)}</div>")
 
 
 def main():

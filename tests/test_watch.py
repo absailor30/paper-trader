@@ -46,3 +46,28 @@ def test_digest_and_dashboard_render():
     html = watch_section(w)
     assert "★ AAA" in html and "Market watch" in html
     assert watch_section(None) == ""
+
+
+def _watch(sig, price, date="2026-10-01"):
+    return {"markets": {"US": {"rows": [{"symbol": "AAA", "signal": sig, "price": price, "bar_date": date,
+                                          "held": False, "d1": 0.0, "d5": 0.0}], "as_of": date}}}
+
+
+def test_signal_logged_once_per_streak_and_scoreboard_measures_forward_return():
+    log = watch.log_signals(_watch("BREAKOUT", 100.0, "2026-10-01"), None)
+    log = watch.log_signals(_watch("BREAKOUT", 103.0, "2026-10-02"), log)  # same streak: not logged again
+    assert len(log["entries"]) == 1
+    log = watch.log_signals(_watch("needs +2.0% to break 20d high", 101.0, "2026-10-03"), log)
+    log = watch.log_signals(_watch("BREAKOUT", 104.0, "2026-10-04"), log)  # new streak
+    assert len(log["entries"]) == 2
+    sb = watch.scoreboard(log, _watch("BREAKOUT", 110.0, "2026-10-11"))["US"]
+    assert sb["signals"] == 2 and sb["pct_positive"] == 100.0
+    assert abs(sb["avg_ret"] - ((110 / 100 - 1) + (110 / 104 - 1)) * 50) < 1e-9
+    assert sb["avg_days"] == (10 + 7) / 2
+
+
+def test_scoreboard_renders_on_dashboard():
+    w = _watch("BREAKOUT", 110.0, "2026-10-11")
+    log = watch.log_signals(_watch("BREAKOUT", 100.0), None)
+    w["scoreboard"] = watch.scoreboard(log, w)
+    assert "Signal scoreboard" in watch_section(w)

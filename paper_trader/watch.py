@@ -113,6 +113,48 @@ def digest_text(watch: dict) -> str:
     return "\n".join(lines)
 
 
+SIGNAL_KEY = "signal_log"
+ACTIVE = ("BREAKOUT", "QUALIFIES")
+
+
+def is_active(signal: str) -> bool:
+    return signal in ACTIVE or signal.startswith("in today")
+
+
+def log_signals(watch: dict, log: Optional[dict]) -> dict:
+    """Record every NEW signal (inactive -> active transition, so a multi-day streak counts once) with its price."""
+    log = log or {"active": {}, "entries": []}
+    for market, block in watch["markets"].items():
+        for r in block["rows"]:
+            key, active = f"{market}:{r['symbol']}", is_active(r["signal"])
+            if active and not log["active"].get(key):
+                log["entries"].append({"market": market, "symbol": r["symbol"], "date": r["bar_date"],
+                                       "price": r["price"], "signal": r["signal"]})
+            log["active"][key] = active
+    log["entries"] = log["entries"][-5000:]
+    return log
+
+
+def scoreboard(log: Optional[dict], watch: dict) -> dict:
+    """Return since each logged signal, measured to the latest price. Forward results only (no backtest, no leakage)."""
+    out = {}
+    for market, block in watch["markets"].items():
+        last = {r["symbol"]: (r["price"], r["bar_date"]) for r in block["rows"]}
+        rets, days = [], []
+        for e in (log or {}).get("entries", []):
+            if e["market"] != market or e["symbol"] not in last or not e["price"]:
+                continue
+            price, bar = last[e["symbol"]]
+            rets.append((price / e["price"] - 1) * 100)
+            days.append((pd.Timestamp(bar) - pd.Timestamp(e["date"])).days)
+        out[market] = {
+            "signals": len(rets), "avg_ret": sum(rets) / len(rets) if rets else None,
+            "pct_positive": 100 * sum(1 for x in rets if x > 0) / len(rets) if rets else None,
+            "avg_days": sum(days) / len(days) if days else None,
+        }
+    return out
+
+
 def run(digest: bool = False) -> dict:
     from datetime import timedelta
 
@@ -122,7 +164,7 @@ def run(digest: bool = False) -> dict:
     from paper_trader.execution.paper_trader import PaperTrader
     from paper_trader.notify import send_telegram_message
     from paper_trader.orchestrator import TradingBot
-    from paper_trader.persistence.state_store import save_state
+    from paper_trader.persistence.state_store import load_state, save_state
     from paper_trader.strategy.donchian_breakout import DonchianBreakoutStrategy
     from paper_trader.strategy.momentum_trend import MomentumTrend
 
@@ -151,6 +193,9 @@ def run(digest: bool = False) -> dict:
             logger.error(f"watch {market} failed: {e}")
         markets[market] = {"rows": rows, "as_of": max((r["bar_date"] for r in rows), default=None)}
     watch = {"generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), "markets": markets}
+    log = log_signals(watch, load_state(SIGNAL_KEY))
+    save_state(SIGNAL_KEY, log)
+    watch["scoreboard"] = scoreboard(log, watch)
     save_state(STATE_KEY, watch)
     if digest:
         send_telegram_message(digest_text(watch))
