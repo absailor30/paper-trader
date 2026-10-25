@@ -1,0 +1,36 @@
+name: TradingAgents test
+
+# Manual, read-only measurement of TradingAgents (TauricResearch) on free NVIDIA models. Places no orders and touches no DB.
+on:
+  workflow_dispatch:
+    inputs:
+      ticker:
+        description: "Yahoo ticker, e.g. GLD, AAPL, BTC-USD"
+        default: "GLD"
+      date:
+        description: "Analysis date YYYY-MM-DD (a past trading day)"
+        default: "2026-10-23"
+      analysts:
+        description: "Comma list: market,news,fundamentals,social"
+        default: "market,news"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90   # the 550B model is slow; do not cut it off early
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install TradingAgents (latest main; commit printed below)
+        run: |
+          git clone --depth 1 https://github.com/TauricResearch/TradingAgents.git ta
+          (cd ta && echo "TradingAgents commit: $(git rev-parse HEAD)" && pip install -q .)
+      - uses: actions/checkout@v4
+        with:
+          path: pt
+      - name: Run one ticker
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          SEC_EDGAR_USER_AGENT: "paper-trader research abhi212b@gmail.com"
+        run: cd pt && python -u scripts/tradingagents_test.py "${{ inputs.ticker }}" "${{ inputs.date }}" "${{ inputs.analysts }}"
