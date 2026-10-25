@@ -14,6 +14,13 @@ on:
         description: "Comma list: market,news,fundamentals,social"
         default: "market,news"
 
+      deep_model:
+        description: "Deep-tier NVIDIA model"
+        default: "nvidia/nemotron-3-ultra-550b-a55b"
+      quick_model:
+        description: "Quick-tier NVIDIA model (tool-calling verified: nemotron-3.5-lightning-30b-a3b, nemotron-3-nano-omni-30b-a3b-reasoning, minimaxai/minimax-m3.1-flash, openai/gpt-oss-20b)"
+        default: "nvidia/nemotron-3.5-lightning-30b-a3b"
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -32,5 +39,7 @@ jobs:
       - name: Run one ticker
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          TA_DEEP: ${{ inputs.deep_model }}
+          TA_QUICK: ${{ inputs.quick_model }}
           SEC_EDGAR_USER_AGENT: "paper-trader research abhi212b@gmail.com"
         run: cd pt && python -u scripts/tradingagents_test.py "${{ inputs.ticker }}" "${{ inputs.date }}" "${{ inputs.analysts }}"
