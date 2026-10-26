@@ -139,6 +139,26 @@ def watch_section(watch):
             f"<div class='grid'>{scoreboard_html}{''.join(blocks)}</div>")
 
 
+def advisor_section(adv):
+    if not adv or not adv.get("total"):
+        return ""
+    from paper_trader.advisor import agrees
+
+    sb = adv["scoreboard"]
+    bits = " &middot; ".join(
+        f"{k}: {v['calls']} calls, {pct(v['avg_ret'])} avg, "
+        f"{'—' if v['pct_positive'] is None else '%.0f%%' % v['pct_positive']} up" for k, v in sb.items())
+    rows = "".join(
+        f"<tr><td>{_html.escape(e['date'])}</td><td class='sym'>{'★ ' if e.get('held') else ''}{_html.escape(e['symbol'])}</td>"
+        f"<td class='{'good' if e['family'] == 'bullish' else ('bad' if e['family'] == 'bearish' else 'dim')}'>{_html.escape(e['rating'])}</td>"
+        f"<td class='dim'>{_html.escape(e.get('rule_signal', ''))}</td><td class='dim'>{_html.escape(agrees(e))}</td></tr>"
+        for e in adv["recent"])
+    return (f"<div class='card'><div class='head'><h2>TradingAgents advisor (log-only, never trades)</h2>"
+            f"<span class='dim'>{adv['total']} calls logged</span></div><div class='sub'>{bits}</div>"
+            f"<table><thead><tr><th>Date</th><th>Symbol</th><th>Rating</th><th>Rule status</th><th>vs rule</th></tr></thead>"
+            f"<tbody>{rows}</tbody></table></div>")
+
+
 def main():
     status = json.load(sys.stdin)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -146,7 +166,8 @@ def main():
                 [("US", "US Stocks"), ("INDIA", "India Stocks"), ("CRYPTO", "Crypto — Binance spot"),
                  ("COMMODITIES", "Commodities — rotation top 3")] if k in status]
     accounts += [(k, f"Jev (AI) — {k}", data) for k, data in status.get("JEV", {}).items()]
-    watch_html = watch_section(status.get("WATCH"))
+    watch_html = watch_section(status.get("WATCH")) + (
+        "<div class='grid'>" + advisor_section(status.get("ADVISOR")) + "</div>" if advisor_section(status.get("ADVISOR")) else "")
     tiles = "".join(summary_tile(*a) for a in accounts)
     cards = "".join(market_card(*a) for a in accounts)
     html = f"""<!doctype html><html><head><meta charset="utf-8">

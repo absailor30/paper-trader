@@ -1,0 +1,48 @@
+name: TradingAgents advisor
+
+# LOG-ONLY. Reviews held symbols + symbols with an active rule signal with TradingAgents on free NVIDIA models and stores the
+# rating next to the rule status. Never places an order. TradingAgents is third-party code, so it runs in its own venv and step
+# with the NVIDIA key only (no DATABASE_URL); our own steps read the plan from / write the results to the database.
+on:
+  schedule:
+    - cron: "50 22 * * 1-5"   # after the market-watch refresh (22:25 UTC)
+  workflow_dispatch:
+    inputs:
+      max_symbols:
+        description: "Max symbols to review (about 10 minutes each)"
+        default: "6"
+
+jobs:
+  advise:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install our dependencies
+        run: pip install -r requirements.txt
+      - name: Plan (which symbols)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python run.py advise-plan --out /tmp/plan.json --max "${{ inputs.max_symbols || '6' }}"
+      - name: Install TradingAgents (pinned commit, own venv)
+        run: |
+          git clone https://github.com/TauricResearch/TradingAgents.git /tmp/ta
+          git -C /tmp/ta checkout e8f5503e9b86d5c2710b0c76b1f686703968c9df
+          python -m venv /tmp/tav
+          /tmp/tav/bin/pip install -q /tmp/ta
+      - name: Run TradingAgents (NVIDIA key only, no database access)
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          SEC_EDGAR_USER_AGENT: "paper-trader research abhi212b@gmail.com"
+          ADVISOR_BUDGET_MIN: "110"
+        run: /tmp/tav/bin/python -u scripts/advisor_run.py /tmp/plan.json /tmp/results.json
+      - name: Record results
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          test -f /tmp/results.json || echo '[]' > /tmp/results.json
+          python run.py advise-record --results /tmp/results.json

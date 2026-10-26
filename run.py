@@ -74,6 +74,11 @@ def main():
     retry_parser.add_argument("--symbol", required=True)
 
     sub.add_parser("commodities")
+    advise_plan = sub.add_parser("advise-plan")
+    advise_plan.add_argument("--out", required=True)
+    advise_plan.add_argument("--max", type=int, default=6)
+    advise_record = sub.add_parser("advise-record")
+    advise_record.add_argument("--results", required=True)
     watch_parser = sub.add_parser("watch")
     watch_parser.add_argument("--digest", action="store_true", help="also send the daily Telegram summary")
     sub.add_parser("status")
@@ -169,6 +174,26 @@ def main():
         print(json.dumps(jev.report(), indent=2, default=str))
         return
 
+    if args.command == "advise-plan":
+        from paper_trader import advisor
+        from paper_trader.persistence.state_store import load_state
+        plan = advisor.select(load_state("market_watch") or {}, args.max)
+        json.dump(plan, open(args.out, "w"))
+        print(json.dumps([f"{p['market']}:{p['ticker']}" for p in plan]))
+        return
+
+    if args.command == "advise-record":
+        from datetime import datetime, timezone
+        from paper_trader import advisor
+        from paper_trader.persistence.state_store import load_state, save_state
+        results = json.load(open(args.results))
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        log = advisor.record(load_state(advisor.STATE_KEY), results, today)
+        save_state(advisor.STATE_KEY, log)
+        print(json.dumps({"results": len(results), "failed": sum(1 for r in results if r.get("error")),
+                          "logged_total": len(log["entries"])}))
+        return
+
     if args.command == "watch":
         from paper_trader.watch import run as run_watch
         watch = run_watch(digest=args.digest)
@@ -198,6 +223,8 @@ def main():
             "CRYPTO": {**crypto_bot.get_status(), "stop_actions": crypto_stop_actions},
             "COMMODITIES": commodities_bot.get_status(),
             "WATCH": load_state("market_watch"),
+            "ADVISOR": __import__("paper_trader.advisor", fromlist=["x"]).view(
+                load_state("advisor_log"), load_state("market_watch")),
         }
         print(json.dumps(result, indent=2, default=str))
         return

@@ -42,4 +42,4 @@ jobs:
           TA_DEEP: ${{ inputs.deep_model }}
           TA_QUICK: ${{ inputs.quick_model }}
           SEC_EDGAR_USER_AGENT: "paper-trader research abhi212b@gmail.com"
-        run: cd pt && python -u scripts/tradingagents_test.py "${{ inputs.ticker }}" "${{ inputs.date }}" "${{ inputs.analysts }}"
+        run: cd pt && python -u scripts/tradingagents_measure.py "${{ inputs.ticker }}" "${{ inputs.date }}" "${{ inputs.analysts }}"
