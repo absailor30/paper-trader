@@ -80,7 +80,9 @@ def scoreboard(log: Optional[dict], watch: dict) -> dict:
 
 def view(log: Optional[dict], watch: Optional[dict], recent: int = 10) -> dict:
     entries = (log or {}).get("entries", [])
-    return {"recent": list(reversed(entries[-recent:])), "total": len(entries),
+    # `agrees` is precomputed here: the dashboard script runs as `python scripts/render_status_page.py` and cannot import paper_trader
+    recent_entries = [{**e, "agrees": agrees(e)} for e in reversed(entries[-recent:])]
+    return {"recent": recent_entries, "total": len(entries),
             "scoreboard": scoreboard(log, watch or {})}
 
 

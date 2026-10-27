@@ -142,8 +142,6 @@ def watch_section(watch):
 def advisor_section(adv):
     if not adv or not adv.get("total"):
         return ""
-    from paper_trader.advisor import agrees
-
     sb = adv["scoreboard"]
     bits = " &middot; ".join(
         f"{k}: {v['calls']} calls, {pct(v['avg_ret'])} avg, "
@@ -151,7 +149,7 @@ def advisor_section(adv):
     rows = "".join(
         f"<tr><td>{_html.escape(e['date'])}</td><td class='sym'>{'★ ' if e.get('held') else ''}{_html.escape(e['symbol'])}</td>"
         f"<td class='{'good' if e['family'] == 'bullish' else ('bad' if e['family'] == 'bearish' else 'dim')}'>{_html.escape(e['rating'])}</td>"
-        f"<td class='dim'>{_html.escape(e.get('rule_signal', ''))}</td><td class='dim'>{_html.escape(agrees(e))}</td></tr>"
+        f"<td class='dim'>{_html.escape(e.get('rule_signal', ''))}</td><td class='dim'>{_html.escape(e.get('agrees', ''))}</td></tr>"
         for e in adv["recent"])
     return (f"<div class='card'><div class='head'><h2>TradingAgents advisor (log-only, never trades)</h2>"
             f"<span class='dim'>{adv['total']} calls logged</span></div><div class='sub'>{bits}</div>"

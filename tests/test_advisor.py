@@ -50,5 +50,28 @@ def test_agreement_and_dashboard_card():
                                  "rule_signal": "BREAKOUT"}], "2026-10-26")
     assert advisor.agrees(log["entries"][0]) == "agrees with rule"
     html = advisor_section(advisor.view(log, _watch()))
-    assert "TradingAgents advisor" in html and "AAA" in html and "log-only" in html
+    assert "TradingAgents advisor" in html and "AAA" in html and "log-only" in html and "agrees with rule" in html
     assert advisor_section(advisor.view(None, None)) == ""
+
+
+def test_dashboard_script_runs_standalone_like_the_status_workflow(tmp_path):
+    """Regression (2026-10-27): status.yml runs `python scripts/render_status_page.py`, where `paper_trader` is NOT importable;
+    an import inside advisor_section crashed the job and froze the dashboard for a day. Run it exactly that way."""
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    log = advisor.record(None, [{"market": "US", "symbol": "AAA", "decision": "Buy", "price": 100.0,
+                                 "rule_signal": "BREAKOUT"}], "2026-10-26")
+    pos = {"symbol": "AAA", "quantity": 1.0, "entry_price": 100.0, "current_price": 101.0, "invested": 100.0,
+           "current_value": 101.0, "unrealized_pnl": 1.0, "unrealized_pnl_pct": 1.0}
+    acct = {"total_value": 101.0, "total_return_pct": 1.0, "capital": 1.0, "positions_value": 100.0, "num_trades": 0,
+            "win_rate": 0.0, "positions": [pos], "realized_pnl": 0.0, "num_closed": 0, "closed_trades": [], "recent_orders": []}
+    status = {"US": acct, "ADVISOR": advisor.view(log, _watch()), "WATCH": _watch()}
+    script = Path(__file__).resolve().parents[1] / "scripts" / "render_status_page.py"
+    env = {"PATH": "/usr/bin:/bin", "PYTHONPATH": ""}
+    r = subprocess.run([sys.executable, str(script)], input=json.dumps(status).encode(), cwd=tmp_path, env=env,
+                       capture_output=True)
+    assert r.returncode == 0, r.stderr.decode()[-500:]
+    assert "TradingAgents advisor" in (tmp_path / "public" / "index.html").read_text()
