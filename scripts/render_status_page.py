@@ -11,8 +11,20 @@ Usage: python run.py status | python scripts/render_status_page.py
 import html as _html
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+IST = timedelta(hours=5, minutes=30)
+
+
+def to_ist(text, suffix=True):
+    """'2026-10-27 22:25 UTC' / '2026-09-23 04:41' (both UTC: GitHub runners) -> '2026-10-28 03:55 IST'. Unparseable input is returned as is."""
+    try:
+        dt = datetime.strptime(str(text).replace(" UTC", "").strip()[:16], "%Y-%m-%d %H:%M") + IST
+    except ValueError:
+        return str(text)
+    return dt.strftime("%Y-%m-%d %H:%M") + (" IST" if suffix else "")
+
 
 CCY = {"CRYPTO": "$", "US": "$", "INDIA": "₹", "COMMODITIES": "$"}
 
@@ -108,7 +120,7 @@ def market_card(key, label, data, day=None):
         f"<div class='l dim'><span>{_html.escape(t['strategy'])}</span><span>Exit {t['exit_price']:,.2f}</span></div></div>"
         for t in closed) or "<div class='empty'>No closed trades yet — nothing has been sold.</div>"
     order_rows = "".join(
-        f"<div class='h'><div class='l'><span class='dim'>{_html.escape(o['time'])} &bull; {_html.escape(o['side'])}</span>"
+        f"<div class='h'><div class='l'><span class='dim'>{_html.escape(to_ist(o['time'], False))} &bull; {_html.escape(o['side'])}</span>"
         f"<span class='{'good' if o['status'] == 'FILLED' else 'bad'}'>{_html.escape(o['status'])}</span></div>"
         f"<div class='l big2'><span class='sym'>{_html.escape(o['symbol'])}</span>"
         f"<span class='dim'>{qty(o['quantity'])} @ {o['price']:,.2f}</span></div>"
@@ -167,7 +179,7 @@ def watch_section(watch):
         "<th class='num'>% up</th><th class='num'>Avg age</th></tr></thead>"
         f"<tbody>{sb_rows}</tbody></table></div>") if sb else ""
     return (f"<div class='chips'>{''.join(chips)}</div>"
-            f"<div class='asof'>every symbol, held or not &middot; refreshed {_html.escape(str(watch.get('generated')))}</div>"
+            f"<div class='asof'>every symbol, held or not &middot; refreshed {_html.escape(to_ist(watch.get('generated')))}</div>"
             f"<div class='grid'>{''.join(blocks)}</div>"
             f"<div class='grid sbgrid'>{scoreboard_html}</div>")
 
@@ -192,7 +204,7 @@ def advisor_section(adv):
 
 def main():
     status = json.load(sys.stdin)
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    now = to_ist(datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"))
     accounts = [(k, label, status[k]) for k, label in
                 [("US", "US Stocks"), ("INDIA", "India Stocks"), ("CRYPTO", "Crypto — Binance spot"),
                  ("COMMODITIES", "Commodities — rotation top 3")] if k in status]
@@ -256,7 +268,7 @@ details.fold>summary{{margin-bottom:2px}}
 table{{font-size:10.5px}} td,th{{padding:3px 3px}}}}
 </style></head><body><div class="wrap">
 <h1>Paper Trader — Status</h1>
-<div class="asof">Last updated {now} · published by GitHub Actions, no Claude session required</div>
+<div class="asof">Last updated {now} · all times IST · published by GitHub Actions, no Claude session required</div>
 <div class="tabs"><button class="tab on" data-t="pf">Portfolio</button><button class="tab" data-t="mw">Market watch</button></div>
 <div id="pf" class="pane"><div class="tiles">{tiles}</div>
 <div class="grid">{cards}</div></div>

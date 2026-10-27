@@ -94,8 +94,18 @@ def build(market: str, data: Dict[str, pd.DataFrame], held: set, strategy=None) 
     return rows
 
 
+def _ist(utc_text: str) -> str:
+    """'2026-10-27 22:25 UTC' -> '2026-10-28 03:55 IST' (user reads IST); unparseable input is returned as is."""
+    from datetime import timedelta
+    try:
+        dt = datetime.strptime(str(utc_text).replace(" UTC", "").strip()[:16], "%Y-%m-%d %H:%M") + timedelta(hours=5, minutes=30)
+    except ValueError:
+        return str(utc_text)
+    return dt.strftime("%Y-%m-%d %H:%M") + " IST"
+
+
 def digest_text(watch: dict) -> str:
-    lines = [f"📊 <b>Daily market watch</b> ({watch.get('generated', '')})"]
+    lines = [f"📊 <b>Daily market watch</b> ({_ist(watch.get('generated', ''))})"]
     for market, block in watch.get("markets", {}).items():
         rows = block["rows"]
         if not rows:

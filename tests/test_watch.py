@@ -71,3 +71,8 @@ def test_scoreboard_renders_on_dashboard():
     log = watch.log_signals(_watch("BREAKOUT", 100.0), None)
     w["scoreboard"] = watch.scoreboard(log, w)
     assert "Signal scoreboard" in watch_section(w)
+
+
+def test_digest_header_in_ist():
+    w = {"generated": "2026-10-27 22:25 UTC", "markets": {}}
+    assert "2026-10-28 03:55 IST" in watch.digest_text(w) and "UTC" not in watch.digest_text(w)

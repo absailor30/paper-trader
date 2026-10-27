@@ -98,3 +98,11 @@ def test_broker_style_holdings_summary_and_day_change():
     assert "Qty. 14 &bull; Avg. 444.42" in html and "LTP 465.10" in html and "-0.19%" in html
     assert "+₹289.50" in html and "-₹368.16" in html
     assert "No open positions" in holdings_block("$", [], {})
+
+
+def test_times_shown_in_ist():
+    from scripts.render_status_page import to_ist
+
+    assert to_ist("2026-10-27 22:25 UTC") == "2026-10-28 03:55 IST"  # crosses midnight
+    assert to_ist("2026-09-23 04:41", suffix=False) == "2026-09-23 10:11"
+    assert to_ist("garbage") == "garbage"
