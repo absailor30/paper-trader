@@ -99,27 +99,22 @@ def market_card(key, label, data, day=None):
     holdings = holdings_block(ccy, data["positions"], day or {})
     closed = data.get("closed_trades", [])
     asof = f" &middot; prices as of {_html.escape(str(data['prices_as_of']))}" if data.get("prices_as_of") else ""
-
-    def closed_row(t):
-        return (f"<tr><td>{_html.escape(t['exit_date'])}</td><td class='sym'>{_html.escape(t['symbol'])}</td>"
-                f"<td class='num'>{t['entry_price']:,.2f} → {t['exit_price']:,.2f}</td>"
-                f"<td class='num {_cls(t['pnl'])}'>{money(ccy, t['pnl'])} <span class='dim'>{pct(t['pnl_pct'])}</span></td>"
-                f"<td class='dim'>{_html.escape(t['strategy'])}</td></tr>")
-
-    closed_head = "<thead><tr><th>Sold</th><th>Symbol</th><th class='num'>Entry → Exit</th><th class='num'>Profit / loss</th><th>Strategy</th></tr></thead>"
-    closed_rows = "".join(closed_row(t) for t in closed[:3]) or \
-        "<tr><td colspan='5' class='empty'>No closed trades yet — nothing has been sold.</td></tr>"
-    more_closed = (f"<details><summary>{len(closed) - 3} more closed trades</summary><table>{closed_head}<tbody>"
-                   f"{''.join(closed_row(t) for t in closed[3:])}</tbody></table></details>") if len(closed) > 3 else ""
     orders = data.get("recent_orders", [])
+    closed_rows = "".join(
+        f"<div class='h'><div class='l'><span class='dim'>Sold {_html.escape(t['exit_date'])} &bull; Avg. {t['entry_price']:,.2f}</span>"
+        f"<span class='{_cls(t['pnl'])}'>{pct(t['pnl_pct'])}</span></div>"
+        f"<div class='l big2'><span class='sym'>{_html.escape(t['symbol'])}</span>"
+        f"<span class='{_cls(t['pnl'])}'>{signed(ccy, t['pnl'])}</span></div>"
+        f"<div class='l dim'><span>{_html.escape(t['strategy'])}</span><span>Exit {t['exit_price']:,.2f}</span></div></div>"
+        for t in closed) or "<div class='empty'>No closed trades yet — nothing has been sold.</div>"
     order_rows = "".join(
-        f"<tr><td>{_html.escape(o['time'])}</td><td>{_html.escape(o['side'])}</td>"
-        f"<td class='sym'>{_html.escape(o['symbol'])}</td>"
-        f"<td class='num'>{qty(o['quantity'])} @ {o['price']:,.2f}</td>"
-        f"<td class='{'good' if o['status'] == 'FILLED' else 'bad'}'>{_html.escape(o['status'])}"
-        f"{(' — ' + _html.escape(str(o['reason']))) if o['status'] != 'FILLED' and o['reason'] else ''}</td></tr>"
-        for o in orders
-    ) or "<tr><td colspan='5' class='empty'>No orders yet.</td></tr>"
+        f"<div class='h'><div class='l'><span class='dim'>{_html.escape(o['time'])} &bull; {_html.escape(o['side'])}</span>"
+        f"<span class='{'good' if o['status'] == 'FILLED' else 'bad'}'>{_html.escape(o['status'])}</span></div>"
+        f"<div class='l big2'><span class='sym'>{_html.escape(o['symbol'])}</span>"
+        f"<span class='dim'>{qty(o['quantity'])} @ {o['price']:,.2f}</span></div>"
+        + (f"<div class='l dim'><span>{_html.escape(str(o['reason']))}</span></div>"
+           if o['status'] != 'FILLED' and o['reason'] else "") + "</div>"
+        for o in orders) or "<div class='empty'>No orders yet.</div>"
     realized = data.get("realized_pnl", 0.0)
     return f"""
     <div class="card">
@@ -128,37 +123,36 @@ def market_card(key, label, data, day=None):
       <div class="sub">cash {money(ccy, data['capital'])} &middot; in positions {money(ccy, data['positions_value'])}
         &middot; {data.get('num_closed', 0)} closed &middot; {data['win_rate']:.0f}% win{asof}</div>
       {holdings}
-      <h3>Closed trades &mdash; realized <span class="{_cls(realized)}">{money(ccy, realized)}</span></h3>
-      <table>{closed_head}<tbody>{closed_rows}</tbody></table>{more_closed}
-      <details><summary>Recent orders ({len(orders)})</summary><table><thead><tr><th>Time</th><th>Side</th><th>Symbol</th>
-        <th class="num">Qty @ price</th><th>Status</th></tr></thead><tbody>{order_rows}</tbody></table></details>
+      <details class="fold" open><summary>Closed trades &mdash; realized <span class="{_cls(realized)}">{money(ccy, realized)}</span> ({len(closed)})</summary>{closed_rows}</details>
+      <details><summary>Recent orders ({len(orders)})</summary>{order_rows}</details>
     </div>"""
 
 
 def watch_section(watch):
+    """Market watch tab body: market chips (phones show one market at a time), broker-style rows, forward scoreboard."""
     if not watch or not watch.get("markets"):
-        return ""
+        return "<div class='empty'>No market watch data yet.</div>"
     labels = {"US": "US Stocks", "INDIA": "India Stocks", "CRYPTO": "Crypto", "COMMODITIES": "Commodities"}
-    blocks = []
-    for key, block in watch["markets"].items():
+    blocks, chips = [], []
+    for i, (key, block) in enumerate(watch["markets"].items()):
         ccy = CCY.get(key, "$")
-
-        def cell(v):
-            return "<td class='num dim'>—</td>" if v is None else f"<td class='num {_cls(v)}'>{pct(v)}</td>"
-
-        rows = "".join(
-            f"<tr><td class='sym'>{'★ ' if r['held'] else ''}{_html.escape(r['symbol'])}</td>"
-            f"<td class='num'>{ccy}{r['price']:,.2f}</td>{cell(r['d1'])}{cell(r['d5'])}"
-            f"<td class='sig {'good' if r['signal'] in ('BREAKOUT', 'QUALIFIES') or r['signal'].startswith('in today') else 'dim'}'>"
-            f"{_html.escape(r['signal'])}</td></tr>"
-            for r in block["rows"]
-        ) or "<tr><td colspan='5' class='empty'>No data this run.</td></tr>"
+        rows = []
+        for r in block["rows"]:
+            sig_cls = "good" if r["signal"] in ("BREAKOUT", "QUALIFIES") or r["signal"].startswith("in today") else "dim"
+            d5 = f"5d <span class='{_cls(r['d5'])}'>{pct(r['d5'])}</span>" if r["d5"] is not None else "5d —"
+            d1 = f"<span class='{_cls(r['d1'])}'>{pct(r['d1'])}</span>" if r["d1"] is not None else "<span class='dim'>—</span>"
+            rows.append(
+                f"<div class='h'><div class='l'><span class='dim'>{d5}</span>{d1}</div>"
+                f"<div class='l big2'><span class='sym'>{'★ ' if r['held'] else ''}{_html.escape(r['symbol'])}</span>"
+                f"<span>{ccy}{r['price']:,.2f}</span></div>"
+                f"<div class='l {sig_cls}'><span>{_html.escape(r['signal'])}</span></div></div>")
+        body = "".join(rows) or "<div class='empty'>No data this run.</div>"
+        chips.append(f"<button class='chip{' on' if i == 0 else ''}' data-m='{key}'>{labels.get(key, key)}</button>")
         blocks.append(
-            f"<div class='card'><div class='head'><h2>{labels.get(key, key)}</h2>"
-            f"<span class='dim'>bars to {_html.escape(str(block.get('as_of')))}</span></div>"
-            f"<table><thead><tr><th>Symbol (★ held)</th><th class='num'>Price</th><th class='num'>1d</th>"
-            f"<th class='num'>5d</th><th>Rule status</th></tr></thead><tbody>{rows}</tbody></table></div>")
+            f"<div class='card wc{' on' if i == 0 else ''}' data-m='{key}'><div class='head'><h2>{labels.get(key, key)}</h2>"
+            f"<span class='dim'>bars to {_html.escape(str(block.get('as_of')))}</span></div>{body}</div>")
     sb = watch.get("scoreboard") or {}
+
     def sb_row(k, v):
         pos = "—" if v["pct_positive"] is None else "%.0f%%" % v["pct_positive"]
         age = "—" if v["avg_days"] is None else "%.0fd" % v["avg_days"]
@@ -169,12 +163,13 @@ def watch_section(watch):
     sb_rows = "".join(sb_row(k, v) for k, v in sb.items())
     scoreboard_html = (
         "<div class='card'><div class='head'><h2>Signal scoreboard (forward results since each signal fired)</h2></div>"
-        "<table><thead><tr><th>Market</th><th class='num'>Signals</th><th class='num'>Avg return since</th>"
-        "<th class='num'>% positive</th><th class='num'>Avg age</th></tr></thead>"
+        "<table><thead><tr><th>Market</th><th class='num'>Signals</th><th class='num'>Avg return</th>"
+        "<th class='num'>% up</th><th class='num'>Avg age</th></tr></thead>"
         f"<tbody>{sb_rows}</tbody></table></div>") if sb else ""
-    return (f"<h1 class='sec'>Market watch &mdash; every symbol, held or not "
-            f"<span class='dim'>(refreshed {_html.escape(str(watch.get('generated')))})</span></h1>"
-            f"<div class='grid'>{scoreboard_html}{''.join(blocks)}</div>")
+    return (f"<div class='chips'>{''.join(chips)}</div>"
+            f"<div class='asof'>every symbol, held or not &middot; refreshed {_html.escape(str(watch.get('generated')))}</div>"
+            f"<div class='grid'>{''.join(blocks)}</div>"
+            f"<div class='grid sbgrid'>{scoreboard_html}</div>")
 
 
 def advisor_section(adv):
@@ -202,8 +197,8 @@ def main():
                 [("US", "US Stocks"), ("INDIA", "India Stocks"), ("CRYPTO", "Crypto — Binance spot"),
                  ("COMMODITIES", "Commodities — rotation top 3")] if k in status]
     accounts += [(k, f"Jev (AI) — {k}", data) for k, data in status.get("JEV", {}).items()]
-    watch_html = watch_section(status.get("WATCH")) + (
-        "<div class='grid'>" + advisor_section(status.get("ADVISOR")) + "</div>" if advisor_section(status.get("ADVISOR")) else "")
+    advisor_html = advisor_section(status.get("ADVISOR"))
+    watch_html = watch_section(status.get("WATCH")) + (f"<div class='grid sbgrid'>{advisor_html}</div>" if advisor_html else "")
     tiles = "".join(summary_tile(*a) for a in accounts)
     day = {m: {r["symbol"]: r["d1"] for r in b["rows"]} for m, b in ((status.get("WATCH") or {}).get("markets") or {}).items()}
     cards = "".join(market_card(*a, day=day.get(a[0].split(":")[0], {})) for a in accounts)
@@ -245,7 +240,16 @@ h1.sec{{font-size:14px;margin:18px 0 8px}}
 .h{{border-top:1px solid var(--border);padding:8px 2px}}
 .h .l{{display:flex;justify-content:space-between;font-size:11.5px;line-height:1.55}}
 .h .big2{{font-size:15px;font-weight:600;color:var(--text)}} .h .big2 .good{{color:var(--good)}} .h .big2 .bad{{color:var(--bad)}}
-@media(max-width:600px){{body{{padding:8px 8px}} h1{{font-size:15px}} .asof{{font-size:10px;margin-bottom:6px}}
+
+.tabs{{display:flex;gap:4px;margin:2px 0 10px;border-bottom:1px solid var(--border)}}
+.tab{{background:none;border:0;border-bottom:2px solid transparent;color:var(--dim);font:600 14px -apple-system,sans-serif;padding:8px 14px;cursor:pointer}}
+.tab.on{{color:#6aa6ff;border-bottom-color:#4b8df8}}
+.chips{{display:none;gap:6px;overflow-x:auto;margin-bottom:6px}}
+.chip{{background:var(--surface);border:1px solid var(--border);border-radius:14px;color:var(--dim);font:600 12px -apple-system,sans-serif;padding:5px 12px;white-space:nowrap;cursor:pointer}}
+.chip.on{{color:#fff;background:#2f4a78;border-color:#4b8df8}}
+.sbgrid{{margin-top:10px}} [hidden]{{display:none!important}}
+details.fold>summary{{margin-bottom:2px}}
+@media(max-width:600px){{.chips{{display:flex}} .wc{{display:none}} .wc.on{{display:block}} body{{padding:8px 8px}} h1{{font-size:15px}} .asof{{font-size:10px;margin-bottom:6px}}
 .tiles{{grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}} .tile{{padding:6px 8px}} .tl,.ts{{font-size:10px}} .tv{{font-size:14px}}
 .grid{{grid-template-columns:1fr;gap:8px}} .card{{padding:8px 9px}} .big{{font-size:14px}} .v{{font-size:15px}} .sumbox{{padding:8px 10px}}
 .h{{padding:6px 0}} .h .l{{font-size:11px;line-height:1.45}} .h .big2{{font-size:14px}} h1.sec{{font-size:13px}}
@@ -253,9 +257,23 @@ table{{font-size:10.5px}} td,th{{padding:3px 3px}}}}
 </style></head><body><div class="wrap">
 <h1>Paper Trader — Status</h1>
 <div class="asof">Last updated {now} · published by GitHub Actions, no Claude session required</div>
-<div class="tiles">{tiles}</div>
-<div class="grid">{cards}</div>
-{watch_html}
+<div class="tabs"><button class="tab on" data-t="pf">Portfolio</button><button class="tab" data-t="mw">Market watch</button></div>
+<div id="pf" class="pane"><div class="tiles">{tiles}</div>
+<div class="grid">{cards}</div></div>
+<div id="mw" class="pane" hidden>{watch_html}</div>
+<script>
+(function(){{
+  var q=function(s){{return Array.prototype.slice.call(document.querySelectorAll(s));}};
+  function tab(t){{q('.tab').forEach(function(b){{b.classList.toggle('on',b.dataset.t===t);}});
+    q('.pane').forEach(function(p){{p.hidden=p.id!==t;}});try{{history.replaceState(null,'','#'+t);}}catch(e){{}}}}
+  q('.tab').forEach(function(b){{b.onclick=function(){{tab(b.dataset.t);}};}});
+  function market(m){{q('.chip').forEach(function(c){{c.classList.toggle('on',c.dataset.m===m);}});
+    q('.wc').forEach(function(c){{c.classList.toggle('on',c.dataset.m===m);}});}}
+  q('.chip').forEach(function(c){{c.onclick=function(){{market(c.dataset.m);}};}});
+  if(location.hash==='#mw')tab('mw');
+  if(window.matchMedia('(max-width:600px)').matches)q('details.fold').forEach(function(d){{d.open=false;}});
+}})();
+</script>
 </div></body></html>"""
     out = Path("public")
     out.mkdir(exist_ok=True)

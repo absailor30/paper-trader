@@ -62,7 +62,8 @@ def test_dashboard_trims_float_noise_and_collapses_extra_trades():
         t.place_order(f"b{i}", "AAA", "BUY", 1.0, 100.0, "S")
         t.place_order(f"s{i}", "AAA", "SELL", 1.0, 110.0, "S")
     data = {**t.get_performance_metrics(), "positions": [], **history_view(t)}
-    assert "more closed trades" in market_card("US", "US Stocks", data)
+    html = market_card("US", "US Stocks", data)
+    assert html.count("Sold ") == 5 and 'class="fold" open' in html  # all rows present, collapsible, open by default (JS closes on phones)
 
 
 def test_open_position_row_shows_current_price():

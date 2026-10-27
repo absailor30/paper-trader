@@ -44,8 +44,8 @@ def test_digest_and_dashboard_render():
     w = {"generated": "2026-10-23 22:25 UTC", "markets": {"US": {"rows": rows, "as_of": rows[0]["bar_date"]}}}
     assert "signal now: AAA" in watch.digest_text(w)
     html = watch_section(w)
-    assert "★ AAA" in html and "Market watch" in html
-    assert watch_section(None) == ""
+    assert "★ AAA" in html and "every symbol, held or not" in html and "data-m='US'" in html
+    assert "No market watch data yet" in watch_section(None)
 
 
 def _watch(sig, price, date="2026-10-01"):
