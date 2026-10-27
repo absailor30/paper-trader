@@ -245,7 +245,11 @@ h1.sec{{font-size:14px;margin:18px 0 8px}}
 .h{{border-top:1px solid var(--border);padding:8px 2px}}
 .h .l{{display:flex;justify-content:space-between;font-size:11.5px;line-height:1.55}}
 .h .big2{{font-size:15px;font-weight:600;color:var(--text)}} .h .big2 .good{{color:var(--good)}} .h .big2 .bad{{color:var(--bad)}}
-@media(max-width:480px){{.grid{{grid-template-columns:1fr}}}}
+@media(max-width:600px){{body{{padding:8px 8px}} h1{{font-size:15px}} .asof{{font-size:10px;margin-bottom:6px}}
+.tiles{{grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}} .tile{{padding:6px 8px}} .tl,.ts{{font-size:10px}} .tv{{font-size:14px}}
+.grid{{grid-template-columns:1fr;gap:8px}} .card{{padding:8px 9px}} .big{{font-size:14px}} .v{{font-size:15px}} .sumbox{{padding:8px 10px}}
+.h{{padding:6px 0}} .h .l{{font-size:11px;line-height:1.45}} .h .big2{{font-size:14px}} h1.sec{{font-size:13px}}
+table{{font-size:10.5px}} td,th{{padding:3px 3px}}}}
 </style></head><body><div class="wrap">
 <h1>Paper Trader — Status</h1>
 <div class="asof">Last updated {now} · published by GitHub Actions, no Claude session required</div>
