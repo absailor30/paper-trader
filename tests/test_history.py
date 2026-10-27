@@ -75,3 +75,9 @@ def test_open_position_row_shows_current_price():
            "unrealized_pnl": (123.45 - pos["entry_price"]) * 5, "unrealized_pnl_pct": 23.0}
     html = market_card("US", "US Stocks", {**t.get_performance_metrics(), "positions": [row], **history_view(t)})
     assert "123.45" in html and "Entry → Now" in html
+
+
+def test_card_labels_market_value_as_in_positions_not_invested():
+    t = _trader()
+    html = market_card("US", "US Stocks", {**t.get_performance_metrics(), "positions": [], **history_view(t)})
+    assert "in positions" in html and "invested $" not in html

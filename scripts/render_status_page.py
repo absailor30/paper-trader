@@ -86,7 +86,7 @@ def market_card(key, label, data):
     <div class="card">
       <div class="head"><h2>{label}</h2>
         <div class="big">{money(ccy, data['total_value'])} <span class="{_cls(ret)}">{pct(ret)}</span></div></div>
-      <div class="sub">cash {money(ccy, data['capital'])} &middot; invested {money(ccy, data['positions_value'])}
+      <div class="sub">cash {money(ccy, data['capital'])} &middot; in positions {money(ccy, data['positions_value'])}
         &middot; {data.get('num_closed', 0)} closed &middot; {data['win_rate']:.0f}% win{asof}</div>
       <table><thead><tr><th>Symbol</th><th class="num">Qty</th><th class="num">Entry → Now</th>
         <th class="num">Value</th><th class="num">Unrealized P&amp;L</th></tr></thead><tbody>{rows}</tbody></table>
