@@ -17,11 +17,29 @@ from pathlib import Path
 CCY = {"CRYPTO": "$", "US": "$", "INDIA": "₹", "COMMODITIES": "$"}
 
 
+def _indian_group(n: float) -> str:
+    """3,98,979.88 style grouping (lakh/crore), as brokers show rupees."""
+    whole, frac = f"{abs(n):.2f}".split(".")
+    head, tail = whole[:-3], whole[-3:]
+    parts = []
+    while len(head) > 2:
+        parts.insert(0, head[-2:])
+        head = head[:-2]
+    if head:
+        parts.insert(0, head)
+    return ",".join(parts + [tail]) + "." + frac
+
+
 def money(ccy, n):
     if n is None:
         return "—"
     sign = "-" if n < 0 else ""
-    return f"{sign}{ccy}{abs(n):,.2f}"
+    body = _indian_group(n) if ccy == "₹" else f"{abs(n):,.2f}"
+    return f"{sign}{ccy}{body}"
+
+
+def signed(ccy, n):
+    return ("+" if n > 0 else "") + money(ccy, n)
 
 
 def pct(n):
@@ -47,17 +65,38 @@ def summary_tile(key, label, data):
             f"<span class='{_cls(data.get('realized_pnl', 0.0))}'>{money(ccy, data.get('realized_pnl', 0.0))}</span></div></div>")
 
 
-def market_card(key, label, data):
+def holdings_block(ccy, positions, day):
+    """Broker-style (Kite Holdings): Invested | Current summary with P&L pill, then one 3-line row per holding."""
+    if not positions:
+        return "<div class='empty'>No open positions.</div>"
+    invested = sum(p["invested"] for p in positions)
+    current = sum(p["current_value"] for p in positions)
+    pnl = current - invested
+    pnl_pct = pnl / invested * 100 if invested else 0.0
+    summary = (
+        f"<div class='sumbox'><div class='srow'><div><div class='k'>Invested</div><div class='v'>{money(ccy, invested)}</div></div>"
+        f"<div class='rt'><div class='k'>Current</div><div class='v'>{money(ccy, current)}</div></div></div>"
+        f"<div class='srow pl'><div class='k'>P&amp;L</div><div class='v {_cls(pnl)}'>{signed(ccy, pnl)} "
+        f"<span class='pill {_cls(pnl)}'>{pct(pnl_pct)}</span></div></div></div>")
+    rows = []
+    for p in positions:
+        c = _cls(p["unrealized_pnl"])
+        d = day.get(p["symbol"])
+        day_txt = f" (<span class='{_cls(d)}'>{pct(d)}</span>)" if d is not None else ""
+        rows.append(
+            f"<div class='h'><div class='l'><span class='dim'>Qty. {qty(p['quantity'])} &bull; Avg. {p['entry_price']:,.2f}</span>"
+            f"<span class='{c}'>{pct(p['unrealized_pnl_pct'])}</span></div>"
+            f"<div class='l big2'><span class='sym'>{_html.escape(p['symbol'])}</span>"
+            f"<span class='{c}'>{signed(ccy, p['unrealized_pnl'])}</span></div>"
+            f"<div class='l dim'><span>Invested {money(ccy, p['invested'])}</span>"
+            f"<span>LTP {p['current_price']:,.2f}{day_txt}</span></div></div>")
+    return summary + "".join(rows)
+
+
+def market_card(key, label, data, day=None):
     ccy = CCY[key]
     ret = data["total_return_pct"]
-    rows = "".join(
-        f"<tr><td class='sym'>{p['symbol']}</td><td class='num'>{qty(p['quantity'])}</td>"
-        f"<td class='num'>{p['entry_price']:,.2f} → <b>{p['current_price']:,.2f}</b></td>"
-        f"<td class='num'>{money(ccy, p['current_value'])}</td>"
-        f"<td class='num {_cls(p['unrealized_pnl'])}'>{money(ccy, p['unrealized_pnl'])} "
-        f"<span class='dim'>{pct(p['unrealized_pnl_pct'])}</span></td></tr>"
-        for p in data["positions"]
-    ) or "<tr><td colspan='5' class='empty'>No open positions.</td></tr>"
+    holdings = holdings_block(ccy, data["positions"], day or {})
     closed = data.get("closed_trades", [])
     asof = f" &middot; prices as of {_html.escape(str(data['prices_as_of']))}" if data.get("prices_as_of") else ""
 
@@ -88,8 +127,7 @@ def market_card(key, label, data):
         <div class="big">{money(ccy, data['total_value'])} <span class="{_cls(ret)}">{pct(ret)}</span></div></div>
       <div class="sub">cash {money(ccy, data['capital'])} &middot; in positions {money(ccy, data['positions_value'])}
         &middot; {data.get('num_closed', 0)} closed &middot; {data['win_rate']:.0f}% win{asof}</div>
-      <table><thead><tr><th>Symbol</th><th class="num">Qty</th><th class="num">Entry → Now</th>
-        <th class="num">Value</th><th class="num">Unrealized P&amp;L</th></tr></thead><tbody>{rows}</tbody></table>
+      {holdings}
       <h3>Closed trades &mdash; realized <span class="{_cls(realized)}">{money(ccy, realized)}</span></h3>
       <table>{closed_head}<tbody>{closed_rows}</tbody></table>{more_closed}
       <details><summary>Recent orders ({len(orders)})</summary><table><thead><tr><th>Time</th><th>Side</th><th>Symbol</th>
@@ -167,13 +205,14 @@ def main():
     watch_html = watch_section(status.get("WATCH")) + (
         "<div class='grid'>" + advisor_section(status.get("ADVISOR")) + "</div>" if advisor_section(status.get("ADVISOR")) else "")
     tiles = "".join(summary_tile(*a) for a in accounts)
-    cards = "".join(market_card(*a) for a in accounts)
+    day = {m: {r["symbol"]: r["d1"] for r in b["rows"]} for m, b in ((status.get("WATCH") or {}).get("markets") or {}).items()}
+    cards = "".join(market_card(*a, day=day.get(a[0].split(":")[0], {})) for a in accounts)
     html = f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Paper Trader Status</title>
 <style>
-:root{{color-scheme:dark light;--bg:#0b0f1a;--surface:#131a2b;--border:#252f47;
---text:#e7ebf5;--dim:#a3adc4;--good:#3ddc84;--bad:#ff6b6b;--mono:ui-monospace,monospace}}
+:root{{color-scheme:dark light;--bg:#141b27;--surface:#1b2433;--border:#2a3548;
+--text:#e8edf5;--dim:#8f9bb0;--good:#4cc16a;--bad:#e5645c;--mono:ui-monospace,monospace}}
 body{{margin:0;background:var(--bg);color:var(--text);font:13px -apple-system,sans-serif;padding:14px 16px}}
 .wrap{{max-width:1500px;margin:0 auto}}
 h1{{font-size:17px;margin:0}}
@@ -182,8 +221,8 @@ h1{{font-size:17px;margin:0}}
 .tile{{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px}}
 .tl{{color:var(--dim);font-size:11px}} .tv{{font-family:var(--mono);font-size:16px;font-weight:700;margin:2px 0}}
 .ts{{color:var(--dim);font-size:11px}}
-.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:10px;align-items:start}}
-.card{{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px}}
+.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(430px,100%),1fr));gap:10px;align-items:start}}
+.card{{min-width:0;overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px}}
 .head{{display:flex;justify-content:space-between;align-items:baseline;gap:8px}}
 .card h2{{font-size:13px;margin:0}}
 .card h3{{font-size:11.5px;margin:10px 0 4px;color:var(--dim)}}
@@ -199,6 +238,13 @@ td{{padding:3px 4px;border-bottom:1px solid var(--border)}}
 details{{margin-top:6px}} summary{{cursor:pointer;color:var(--dim);font-size:11.5px}}
 h1.sec{{font-size:14px;margin:18px 0 8px}}
 .sig{{font-size:11px}}
+.sumbox{{background:#2a3649;border-radius:8px;padding:10px 12px;margin:6px 0 8px}}
+.srow{{display:flex;justify-content:space-between;align-items:flex-end}} .srow.pl{{border-top:1px solid #3a475c;margin-top:8px;padding-top:8px;align-items:center}}
+.k{{color:var(--dim);font-size:12px}} .v{{font-size:17px;font-weight:600}} .rt{{text-align:right}}
+.pill{{font-size:11px;font-weight:600;padding:2px 7px;border-radius:10px;background:#3a2c35;margin-left:4px}} .pill.good{{background:#27402f}}
+.h{{border-top:1px solid var(--border);padding:8px 2px}}
+.h .l{{display:flex;justify-content:space-between;font-size:11.5px;line-height:1.55}}
+.h .big2{{font-size:15px;font-weight:600;color:var(--text)}} .h .big2 .good{{color:var(--good)}} .h .big2 .bad{{color:var(--bad)}}
 @media(max-width:480px){{.grid{{grid-template-columns:1fr}}}}
 </style></head><body><div class="wrap">
 <h1>Paper Trader — Status</h1>

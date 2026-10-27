@@ -74,10 +74,26 @@ def test_open_position_row_shows_current_price():
            "invested": pos["entry_price"] * 5, "current_value": 123.45 * 5,
            "unrealized_pnl": (123.45 - pos["entry_price"]) * 5, "unrealized_pnl_pct": 23.0}
     html = market_card("US", "US Stocks", {**t.get_performance_metrics(), "positions": [row], **history_view(t)})
-    assert "123.45" in html and "Entry → Now" in html
+    assert "123.45" in html and "Avg." in html and "LTP" in html and "Invested" in html
 
 
 def test_card_labels_market_value_as_in_positions_not_invested():
     t = _trader()
     html = market_card("US", "US Stocks", {**t.get_performance_metrics(), "positions": [], **history_view(t)})
     assert "in positions" in html and "invested $" not in html
+
+
+def test_broker_style_holdings_summary_and_day_change():
+    from scripts.render_status_page import _indian_group, holdings_block, money
+
+    assert _indian_group(398979.88) == "3,98,979.88" and _indian_group(999.5) == "999.50" and _indian_group(12345678.9) == "1,23,45,678.90"
+    assert money("₹", -9315.34) == "-₹9,315.34" and money("$", 1234.5) == "$1,234.50"
+    pos = [{"symbol": "AAA", "quantity": 14.0, "entry_price": 444.42, "current_price": 465.10, "invested": 6221.9,
+            "current_value": 6511.4, "unrealized_pnl": 289.5, "unrealized_pnl_pct": 4.65},
+           {"symbol": "BBB", "quantity": 39.0, "entry_price": 319.95, "current_price": 310.51, "invested": 12478.05,
+            "current_value": 12109.89, "unrealized_pnl": -368.16, "unrealized_pnl_pct": -2.95}]
+    html = holdings_block("₹", pos, {"AAA": -0.19})
+    assert "Invested" in html and "Current" in html and "₹18,699.95" in html  # 6221.9 + 12478.05
+    assert "Qty. 14 &bull; Avg. 444.42" in html and "LTP 465.10" in html and "-0.19%" in html
+    assert "+₹289.50" in html and "-₹368.16" in html
+    assert "No open positions" in holdings_block("$", [], {})
