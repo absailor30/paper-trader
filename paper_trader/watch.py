@@ -104,6 +104,28 @@ def _ist(utc_text: str) -> str:
     return dt.strftime("%Y-%m-%d %H:%M") + " IST"
 
 
+FUT_KEY = "futures_watch"
+FUT_LABELS = {"FUT_US": "US index futures", "FUT_INDIA": "India index (proxy)", "FUT_COMMODITIES": "Commodity futures",
+              "FUT_CRYPTO": "Crypto (spot proxy)", "FOREX": "Forex"}
+
+
+def build_futures(data: Dict[str, pd.DataFrame]) -> List[dict]:
+    """Rows for the Futures tab: price, 1d/5d move and the long/short trend regime (Donchian 55/20, shorts allowed)."""
+    from paper_trader.strategy.long_short_trend import describe
+    rows = []
+    for symbol, df in data.items():
+        if df is None or df.empty or len(df) < 2:
+            continue
+        row = base_row(symbol, df, False)
+        d = describe(df, 55, 20)
+        row["signal"] = (f"{d['state']} since {d['since']} · long above {d['to_long_pct']:+.1f}% · short below {d['to_short_pct']:+.1f}%"
+                         if d else "not enough history")
+        row["regime"] = d["state"] if d else None
+        rows.append(row)
+    rows.sort(key=lambda r: (r["regime"] in (None, "FLAT"), r["symbol"]))
+    return rows
+
+
 def digest_text(watch: dict) -> str:
     lines = [f"📊 <b>Daily market watch</b> ({_ist(watch.get('generated', ''))})"]
     for market, block in watch.get("markets", {}).items():
@@ -165,6 +187,25 @@ def scoreboard(log: Optional[dict], watch: dict) -> dict:
     return out
 
 
+def run_futures(fx, start: str) -> dict:
+    from paper_trader.data.binance_fetcher import BinanceFetcher
+    plan = {"FUT_US": lambda: fx.fetch_many(settings.futures_us, start_date=start),
+            "FUT_INDIA": lambda: fx.fetch_many(settings.futures_india, start_date=start),
+            "FUT_COMMODITIES": lambda: fx.fetch_many(settings.futures_commodities, start_date=start),
+            "FUT_CRYPTO": lambda: BinanceFetcher(market="spot").fetch_many(settings.futures_crypto, start_date=start),
+            "FOREX": lambda: fx.fetch_many(settings.forex_pairs, start_date=start)}
+    markets = {}
+    for key, fetch in plan.items():
+        try:
+            rows = build_futures(fetch())
+        except Exception as e:
+            from loguru import logger
+            logger.error(f"futures watch {key} failed: {e}")
+            rows = []
+        markets[key] = {"rows": rows, "as_of": max((r["bar_date"] for r in rows), default=None)}
+    return {"generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), "markets": markets}
+
+
 def run(digest: bool = False) -> dict:
     from datetime import timedelta
 
@@ -203,6 +244,11 @@ def run(digest: bool = False) -> dict:
             logger.error(f"watch {market} failed: {e}")
         markets[market] = {"rows": rows, "as_of": max((r["bar_date"] for r in rows), default=None)}
     watch = {"generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), "markets": markets}
+    try:
+        save_state(FUT_KEY, run_futures(fx, start))
+    except Exception as e:  # futures data trouble must never stop the main watch
+        from loguru import logger
+        logger.error(f"futures watch failed: {e}")
     log = log_signals(watch, load_state(SIGNAL_KEY))
     save_state(SIGNAL_KEY, log)
     watch["scoreboard"] = scoreboard(log, watch)

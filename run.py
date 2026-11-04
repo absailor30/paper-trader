@@ -237,6 +237,7 @@ def main():
             "COMMODITIES": commodities_bot.get_status(),
             "OPTIONS": options_bot.get_status(),
             "WATCH": load_state("market_watch"),
+            "FUTURES": load_state("futures_watch"),
             "ADVISOR": __import__("paper_trader.advisor", fromlist=["x"]).view(
                 load_state("advisor_log"), load_state("market_watch")),
         }

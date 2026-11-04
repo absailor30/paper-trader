@@ -76,3 +76,18 @@ def test_scoreboard_renders_on_dashboard():
 def test_digest_header_in_ist():
     w = {"generated": "2026-10-27 22:25 UTC", "markets": {}}
     assert "2026-10-28 03:55 IST" in watch.digest_text(w) and "UTC" not in watch.digest_text(w)
+
+
+def test_build_futures_regime_rows_and_futures_tab_render():
+    from scripts.render_status_page import futures_tab, options_tab
+    up = _df(np.concatenate([np.full(70, 100.0), np.linspace(100, 130, 30)]))
+    down = _df(np.concatenate([np.full(70, 100.0), np.linspace(100, 70, 30)]))
+    flat = _df(np.full(100, 100.0))
+    rows = watch.build_futures({"UPX": up, "DNX": down, "FLT": flat})
+    reg = {r["symbol"]: r["regime"] for r in rows}
+    assert reg == {"UPX": "LONG", "DNX": "SHORT", "FLT": "FLAT"}
+    assert rows[-1]["symbol"] == "FLT"  # active regimes first
+    fut = {"generated": "2026-11-05 10:00 UTC", "markets": {"FUT_US": {"rows": rows, "as_of": rows[0]["bar_date"]}, "FOREX": {"rows": [], "as_of": None}}}
+    html = futures_tab(fut)
+    assert "US index futures" in html and "SHORT since" in html and "Forex" in html and "data-m='FUT_US'" in html
+    assert "No futures data yet" in futures_tab(None) and "No options account yet" in options_tab(None)

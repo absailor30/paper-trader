@@ -193,11 +193,31 @@ def orders_section(accounts):
     return f"<div class='chips2'>{''.join(chips)}</div><div class='grid'>{''.join(cards)}</div>"
 
 
-def watch_section(watch):
+def options_tab(acct):
+    if not acct:
+        return "<div class='empty'>No options account yet.</div>"
+    card = market_card("OPTIONS", "Options — long calls/puts", acct)
+    orders = orders_section([("OPTIONS", "Options — long calls/puts", acct)])
+    note = ("<div class='asof'>US options, long calls/puts on stock rule signals, forward paper test only (no historical chains exist "
+            "for a backtest). One contract = 100 shares: a $100 account usually cannot afford any, so most days nothing trades.</div>")
+    return f"{note}<div class='grid'>{card}</div><h1 class='sec'>Executed orders</h1>{orders}"
+
+
+def futures_tab(fut):
+    if not fut:
+        return "<div class='empty'>No futures data yet. It appears after the next market watch run.</div>"
+    note = ("long/short trend regime (Donchian 55/20, shorts allowed) per instrument. Proxies: India = index (no free NSE futures), "
+            "crypto = spot (perpetual endpoint blocked), commodities/US = continuous front-month. Watch only until the backtest passes.")
+    from_labels = {"FUT_US": "US index futures", "FUT_INDIA": "India index (proxy)", "FUT_COMMODITIES": "Commodity futures",
+                   "FUT_CRYPTO": "Crypto (spot proxy)", "FOREX": "Forex"}
+    return watch_section(fut, labels=from_labels, scoreboard=False, note=note)
+
+
+def watch_section(watch, labels=None, scoreboard=True, note=""):
     """Market watch tab body: market chips (phones show one market at a time), broker-style rows, forward scoreboard."""
     if not watch or not watch.get("markets"):
         return "<div class='empty'>No market watch data yet.</div>"
-    labels = {"US": "US Stocks", "INDIA": "India Stocks", "CRYPTO": "Crypto", "COMMODITIES": "Commodities"}
+    labels = labels or {"US": "US Stocks", "INDIA": "India Stocks", "CRYPTO": "Crypto", "COMMODITIES": "Commodities"}
     blocks, chips = [], []
     for i, (key, block) in enumerate(watch["markets"].items()):
         ccy = CCY.get(key, "$")
@@ -216,7 +236,7 @@ def watch_section(watch):
         blocks.append(
             f"<div class='card wc{' on' if i == 0 else ''}' data-m='{key}'><div class='head'><h2>{labels.get(key, key)}</h2>"
             f"<span class='dim'>bars to {_html.escape(str(block.get('as_of')))}</span></div>{body}</div>")
-    sb = watch.get("scoreboard") or {}
+    sb = (watch.get("scoreboard") or {}) if scoreboard else {}
 
     def sb_row(k, v):
         pos = "—" if v["pct_positive"] is None else "%.0f%%" % v["pct_positive"]
@@ -232,7 +252,7 @@ def watch_section(watch):
         "<th class='num'>% up</th><th class='num'>Avg age</th></tr></thead>"
         f"<tbody>{sb_rows}</tbody></table></div>") if sb else ""
     return (f"<div class='chips'>{''.join(chips)}</div>"
-            f"<div class='asof'>every symbol, held or not &middot; refreshed {_html.escape(to_ist(watch.get('generated')))}</div>"
+            f"<div class='asof'>{_html.escape(note) or 'every symbol, held or not'} &middot; refreshed {_html.escape(to_ist(watch.get('generated')))}</div>"
             f"<div class='grid'>{''.join(blocks)}</div>"
             f"<div class='grid sbgrid'>{scoreboard_html}</div>")
 
@@ -264,11 +284,13 @@ def main():
     ref = os.environ.get("GITHUB_REF_NAME", "rebuild/v2")
     accounts = [(k, label, status[k]) for k, label in
                 [("US", "US Stocks"), ("INDIA", "India Stocks"), ("CRYPTO", "Crypto — Binance spot"),
-                 ("COMMODITIES", "Commodities — rotation top 3"), ("OPTIONS", "Options — long calls/puts")] if k in status]
+                 ("COMMODITIES", "Commodities — rotation top 3")] if k in status]
     accounts += [(k, f"Jev (AI) — {k}", data) for k, data in status.get("JEV", {}).items()]
     advisor_html = advisor_section(status.get("ADVISOR"))
     watch_html = watch_section(status.get("WATCH")) + (f"<div class='grid sbgrid'>{advisor_html}</div>" if advisor_html else "")
     orders_html = orders_section(accounts)
+    options_html = options_tab(status.get("OPTIONS"))
+    futures_html = futures_tab(status.get("FUTURES"))
     tiles = "".join(summary_tile(*a) for a in accounts)
     day = {m: {r["symbol"]: r["d1"] for r in b["rows"]} for m, b in ((status.get("WATCH") or {}).get("markets") or {}).items()}
     cols = "".join(
@@ -313,8 +335,8 @@ h1.sec{{font-size:14px;margin:18px 0 8px}}
 .h .l{{display:flex;justify-content:space-between;font-size:11.5px;line-height:1.55}}
 .h .big2{{font-size:15px;font-weight:600;color:var(--text)}} .h .big2 .good{{color:var(--good)}} .h .big2 .bad{{color:var(--bad)}}
 
-.tabs{{display:flex;gap:4px;margin:2px 0 10px;border-bottom:1px solid var(--border)}}
-.tab{{background:none;border:0;border-bottom:2px solid transparent;color:var(--dim);font:600 14px -apple-system,sans-serif;padding:8px 14px;cursor:pointer}}
+.tabs{{display:flex;gap:2px;margin:2px 0 10px;border-bottom:1px solid var(--border);overflow-x:auto}}
+.tab{{background:none;border:0;border-bottom:2px solid transparent;color:var(--dim);font:600 14px -apple-system,sans-serif;padding:8px 14px;cursor:pointer;white-space:nowrap}}
 .tab.on{{color:#6aa6ff;border-bottom-color:#4b8df8}}
 .chips2{{display:flex;gap:6px;overflow-x:auto;margin-bottom:8px}} .ochip{{background:var(--surface);border:1px solid var(--border);border-radius:14px;color:var(--dim);font:600 12px -apple-system,sans-serif;padding:5px 12px;white-space:nowrap;cursor:pointer}} .ochip.on{{color:#fff;background:#2f4a78;border-color:#4b8df8}}
 .oc{{display:none}} .oc.on{{display:block}}
@@ -332,7 +354,7 @@ h1.sec{{font-size:14px;margin:18px 0 8px}}
 .tiles{{display:none}}
 .sbgrid{{margin-top:10px}} [hidden]{{display:none!important}}
 details.fold>summary{{margin-bottom:2px}}
-@media(max-width:600px){{.tiles{{display:grid}} .coltile{{display:none}} .cols{{grid-template-columns:1fr;gap:8px}} .chips{{display:flex}} .wc{{display:none}} .wc.on{{display:block}} body{{padding:8px 8px}} h1{{font-size:15px}} .asof{{font-size:10px;margin-bottom:6px}}
+@media(max-width:600px){{.tab{{padding:8px 9px;font-size:13px}} .tiles{{display:grid}} .coltile{{display:none}} .cols{{grid-template-columns:1fr;gap:8px}} .chips{{display:flex}} .wc{{display:none}} .wc.on{{display:block}} body{{padding:8px 8px}} h1{{font-size:15px}} .asof{{font-size:10px;margin-bottom:6px}}
 .tiles{{grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}} .tile{{padding:6px 8px}} .tl,.ts{{font-size:10px}} .tv{{font-size:14px}}
 .grid{{grid-template-columns:1fr;gap:8px}} .card{{padding:8px 9px}} .big{{font-size:14px}} .v{{font-size:15px}} .sumbox{{padding:8px 10px}}
 .h{{padding:6px 0}} .h .l{{font-size:11px;line-height:1.45}} .h .big2{{font-size:14px}} h1.sec{{font-size:13px}}
@@ -342,22 +364,24 @@ table{{font-size:10.5px}} td,th{{padding:3px 3px}}}}
 <div class="top"><div class="asof">Last updated {now} · <span id="age" data-ts="{now_iso}"></span> · all times IST · published by GitHub Actions</div>
 <div class="rfbox"><button id="rf" class="rf" title="Start a fresh data run now">&#8635; Refresh</button><button id="rfset" class="rfset" title="Set or clear the GitHub token">&#9881;</button></div></div>
 <div id="rfmsg" class="rfmsg"></div>
-<div class="tabs"><button class="tab on" data-t="pf">Portfolio</button><button class="tab" data-t="od">Orders</button><button class="tab" data-t="mw">Market watch</button></div>
+<div class="tabs"><button class="tab on" data-t="pf">Portfolio</button><button class="tab" data-t="od">Orders</button><button class="tab" data-t="mw">Market watch</button><button class="tab" data-t="op">Options</button><button class="tab" data-t="fu">Futures</button></div>
 <div id="pf" class="pane"><div class="tiles">{tiles}</div>
 <div class="cols">{cols}</div></div>
 <div id="od" class="pane" hidden>{orders_html}</div>
 <div id="mw" class="pane" hidden>{watch_html}</div>
+<div id="op" class="pane" hidden>{options_html}</div>
+<div id="fu" class="pane" hidden>{futures_html}</div>
 <script>
 (function(){{
   var q=function(s){{return Array.prototype.slice.call(document.querySelectorAll(s));}};
   function tab(t){{q('.tab').forEach(function(b){{b.classList.toggle('on',b.dataset.t===t);}});
     q('.pane').forEach(function(p){{p.hidden=p.id!==t;}});try{{history.replaceState(null,'','#'+t);}}catch(e){{}}}}
   q('.tab').forEach(function(b){{b.onclick=function(){{tab(b.dataset.t);}};}});
-  function market(m){{q('.chip').forEach(function(c){{c.classList.toggle('on',c.dataset.m===m);}});
-    q('.wc').forEach(function(c){{c.classList.toggle('on',c.dataset.m===m);}});}}
-  q('.chip').forEach(function(c){{c.onclick=function(){{market(c.dataset.m);}};}});
+  q('.chip').forEach(function(c){{c.onclick=function(){{var pane=c.closest('.pane'),m=c.dataset.m;
+    pane.querySelectorAll('.chip').forEach(function(x){{x.classList.toggle('on',x.dataset.m===m);}});
+    pane.querySelectorAll('.wc').forEach(function(x){{x.classList.toggle('on',x.dataset.m===m);}});}};}});
   q('.ochip').forEach(function(c){{c.onclick=function(){{q('.ochip').forEach(function(x){{x.classList.toggle('on',x===c);}});q('.oc').forEach(function(x){{x.classList.toggle('on',x.dataset.a===c.dataset.a);}});}};}});
-  var h=location.hash.slice(1);if(h==='mw'||h==='od')tab(h);
+  var h=location.hash.slice(1);if(['mw','od','op','fu'].indexOf(h)>=0)tab(h);
   /* ---- age + manual refresh (token stays in this browser only) ---- */
   var REPO={json.dumps(repo)}, REF={json.dumps(ref)};
   function age(){{var el=document.getElementById('age');if(!el)return;var m=(Date.now()-Date.parse(el.dataset.ts))/60000;
