@@ -10,6 +10,7 @@ Usage: python run.py status | python scripts/render_status_page.py
 """
 import html as _html
 import json
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -204,7 +205,11 @@ def advisor_section(adv):
 
 def main():
     status = json.load(sys.stdin)
-    now = to_ist(datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"))
+    now_utc = datetime.now(timezone.utc)
+    now = to_ist(now_utc.strftime("%Y-%m-%d %H:%M"))
+    now_iso = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    repo = os.environ.get("GITHUB_REPOSITORY", "absailor30/paper-trader")
+    ref = os.environ.get("GITHUB_REF_NAME", "rebuild/v2")
     accounts = [(k, label, status[k]) for k, label in
                 [("US", "US Stocks"), ("INDIA", "India Stocks"), ("CRYPTO", "Crypto — Binance spot"),
                  ("COMMODITIES", "Commodities — rotation top 3")] if k in status]
@@ -259,6 +264,12 @@ h1.sec{{font-size:14px;margin:18px 0 8px}}
 .chips{{display:none;gap:6px;overflow-x:auto;margin-bottom:6px}}
 .chip{{background:var(--surface);border:1px solid var(--border);border-radius:14px;color:var(--dim);font:600 12px -apple-system,sans-serif;padding:5px 12px;white-space:nowrap;cursor:pointer}}
 .chip.on{{color:#fff;background:#2f4a78;border-color:#4b8df8}}
+.top{{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}}
+.rfbox{{display:flex;gap:4px;flex-shrink:0}}
+.rf{{background:#2f4a78;border:1px solid #4b8df8;color:#fff;border-radius:14px;font:600 12px -apple-system,sans-serif;padding:5px 11px;cursor:pointer}}
+.rf:disabled{{opacity:.55;cursor:default}}
+.rfset{{background:none;border:1px solid var(--border);color:var(--dim);border-radius:14px;font-size:12px;padding:4px 8px;cursor:pointer}}
+.rfmsg{{font-size:11.5px;color:var(--dim);min-height:0;margin:0 0 4px}} .rfmsg:empty{{display:none}}
 .sbgrid{{margin-top:10px}} [hidden]{{display:none!important}}
 details.fold>summary{{margin-bottom:2px}}
 @media(max-width:600px){{.chips{{display:flex}} .wc{{display:none}} .wc.on{{display:block}} body{{padding:8px 8px}} h1{{font-size:15px}} .asof{{font-size:10px;margin-bottom:6px}}
@@ -268,7 +279,9 @@ details.fold>summary{{margin-bottom:2px}}
 table{{font-size:10.5px}} td,th{{padding:3px 3px}}}}
 </style></head><body><div class="wrap">
 <h1>Paper Trader — Status</h1>
-<div class="asof">Last updated {now} · all times IST · published by GitHub Actions, no Claude session required</div>
+<div class="top"><div class="asof">Last updated {now} · <span id="age" data-ts="{now_iso}"></span> · all times IST · published by GitHub Actions</div>
+<div class="rfbox"><button id="rf" class="rf" title="Start a fresh data run now">&#8635; Refresh</button><button id="rfset" class="rfset" title="Set or clear the GitHub token">&#9881;</button></div></div>
+<div id="rfmsg" class="rfmsg"></div>
 <div class="tabs"><button class="tab on" data-t="pf">Portfolio</button><button class="tab" data-t="mw">Market watch</button></div>
 <div id="pf" class="pane"><div class="tiles">{tiles}</div>
 <div class="grid">{cards}</div></div>
@@ -283,6 +296,36 @@ table{{font-size:10.5px}} td,th{{padding:3px 3px}}}}
     q('.wc').forEach(function(c){{c.classList.toggle('on',c.dataset.m===m);}});}}
   q('.chip').forEach(function(c){{c.onclick=function(){{market(c.dataset.m);}};}});
   if(location.hash==='#mw')tab('mw');
+  /* ---- age + manual refresh (token stays in this browser only) ---- */
+  var REPO={json.dumps(repo)}, REF={json.dumps(ref)};
+  function age(){{var el=document.getElementById('age');if(!el)return;var m=(Date.now()-Date.parse(el.dataset.ts))/60000;
+    var t=m<90?Math.round(m)+' min ago':(m/60).toFixed(1)+' h ago';el.textContent='data '+t;el.style.color=m>180?'#e0a030':'';}}
+  age();setInterval(age,60000);
+  var msg=function(t,bad){{var e=document.getElementById('rfmsg');e.textContent=t;e.style.color=bad?'#e5645c':'';}};
+  function dispatch(file,tok){{return fetch('https://api.github.com/repos/'+REPO+'/actions/workflows/'+file+'/dispatches',{{method:'POST',
+    headers:{{'Authorization':'Bearer '+tok,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}},body:JSON.stringify({{ref:REF}})}});}}
+  function wait(sec,label){{return new Promise(function(res){{var n=sec;(function tick(){{msg(label+' '+n+'s');if(n--<=0)return res();setTimeout(tick,1000);}})();}});}}
+  function token(){{try{{return localStorage.getItem('gh_pat');}}catch(e){{return null;}}}}
+  function ask(){{var t=prompt('Paste a GitHub fine-grained token for '+REPO+' with Actions: Read and write (nothing else). It is stored only in this browser. Leave empty to cancel.');
+    if(t){{t=t.trim();try{{localStorage.setItem('gh_pat',t);}}catch(e){{}}return t;}}return null;}}
+  document.getElementById('rfset').onclick=function(){{if(token()&&confirm('Remove the saved token from this browser?')){{localStorage.removeItem('gh_pat');msg('Token removed.');}}else if(!token()){{ask();}}}};
+  var busy=false;
+  document.getElementById('rf').onclick=async function(){{
+    if(busy)return;var tok=token()||ask();
+    if(!tok){{window.open('https://github.com/'+REPO+'/actions/workflows/status.yml','_blank');msg('No token: opened the Actions page. Tap "Run workflow" there.');return;}}
+    busy=true;this.disabled=true;
+    try{{
+      var r=await dispatch('market-watch.yml',tok);
+      if(r.status===401||r.status===403||r.status===404){{if(r.status===401)localStorage.removeItem('gh_pat');msg('GitHub refused ('+r.status+'). Check the token has Actions: Read and write on '+REPO+'.',true);return;}}
+      if(r.status!==204){{msg('Unexpected response '+r.status,true);return;}}
+      await wait(70,'Fetching market data, then dashboard in');
+      var r2=await dispatch('status.yml',tok);
+      if(r2.status!==204){{msg('Dashboard run failed to start ('+r2.status+')',true);return;}}
+      await wait(75,'Building the dashboard, reloading in');
+      location.reload();
+    }}catch(e){{msg('Network error: '+e.message,true);}}finally{{busy=false;this.disabled=false;}}
+  }};
+
   if(window.matchMedia('(max-width:600px)').matches)q('details.fold').forEach(function(d){{d.open=false;}});
 }})();
 </script>
