@@ -141,6 +141,58 @@ def market_card(key, label, data, day=None):
     </div>"""
 
 
+def orders_section(accounts):
+    """Orders tab: per account, executed SELLS (realized P&L) and BUYS (delta vs the current price while still held)."""
+    cards, chips = [], []
+    for i, (key, label, data) in enumerate(accounts):
+        ccy = CCY.get(key, "$")
+        ex = data.get("executed", [])
+        held = {p["symbol"]: p for p in data.get("positions", [])}
+        buys = [o for o in ex if o["side"] == "BUY"]
+        sells = [o for o in ex if o["side"] == "SELL"]
+        realized = sum(o.get("pnl") or 0.0 for o in sells)
+        bought = sum(o["value"] for o in buys)
+        sold = sum(o["value"] for o in sells)
+        open_delta = 0.0
+        sell_rows = "".join(
+            f"<div class='h'><div class='l'><span class='dim'>{_html.escape(to_ist(o['time'], False))} &bull; SELL</span>"
+            f"<span class='{_cls(o.get('pnl'))}'>{pct(o.get('pnl_pct'))}</span></div>"
+            f"<div class='l big2'><span class='sym'>{_html.escape(o['symbol'])}</span>"
+            f"<span class='{_cls(o.get('pnl'))}'>{signed(ccy, o['pnl']) if o.get('pnl') is not None else '—'}</span></div>"
+            f"<div class='l dim'><span>{qty(o['quantity'])} @ {o['price']:,.2f} = {money(ccy, o['value'])}</span>"
+            f"<span>{_html.escape(o.get('strategy', ''))}</span></div></div>" for o in sells
+        ) or "<div class='empty'>No executed sells yet.</div>"
+        buy_rows = []
+        for o in buys:
+            pos = held.get(o["symbol"])
+            if pos and o["price"]:
+                delta = (pos["current_price"] - o["price"]) * o["quantity"]
+                dpct = (pos["current_price"] / o["price"] - 1) * 100
+                open_delta += delta
+                right, mid = f"<span class='{_cls(delta)}'>{pct(dpct)}</span>", f"<span class='{_cls(delta)}'>{signed(ccy, delta)}</span>"
+                low = f"now {pos['current_price']:,.2f} (still held)"
+            else:
+                right, mid, low = "<span class='dim'>closed</span>", f"<span>{money(ccy, o['value'])}</span>", "position since sold, see Sells"
+            buy_rows.append(
+                f"<div class='h'><div class='l'><span class='dim'>{_html.escape(to_ist(o['time'], False))} &bull; BUY</span>{right}</div>"
+                f"<div class='l big2'><span class='sym'>{_html.escape(o['symbol'])}</span>{mid}</div>"
+                f"<div class='l dim'><span>{qty(o['quantity'])} @ {o['price']:,.2f} = {money(ccy, o['value'])}</span><span>{low}</span></div></div>")
+        buy_html = "".join(buy_rows) or "<div class='empty'>No executed buys yet.</div>"
+        chips.append(f"<button class='ochip{' on' if i == 0 else ''}' data-a='{i}'>{_html.escape(label.split(' — ')[0])}</button>")
+        cards.append(
+            f"<div class='card oc{' on' if i == 0 else ''}' data-a='{i}'><div class='head'><h2>{_html.escape(label)}</h2>"
+            f"<span class='dim'>{len(buys)} buys &middot; {len(sells)} sells</span></div>"
+            f"<div class='sumbox'><div class='srow'><div><div class='k'>Bought</div><div class='v'>{money(ccy, bought)}</div></div>"
+            f"<div class='rt'><div class='k'>Sold</div><div class='v'>{money(ccy, sold)}</div></div></div>"
+            f"<div class='srow pl'><div class='k'>Realized P&amp;L (sells)</div><div class='v {_cls(realized)}'>{signed(ccy, realized)}</div></div>"
+            f"<div class='srow pl'><div class='k'>Open buys vs now</div><div class='v {_cls(open_delta)}'>{signed(ccy, open_delta)}</div></div></div>"
+            f"<details open><summary>Sells &mdash; executed ({len(sells)})</summary>{sell_rows}</details>"
+            f"<details open><summary>Buys &mdash; executed ({len(buys)})</summary>{buy_html}</details></div>")
+    if not cards:
+        return "<div class='empty'>No executed orders yet.</div>"
+    return f"<div class='chips2'>{''.join(chips)}</div><div class='grid'>{''.join(cards)}</div>"
+
+
 def watch_section(watch):
     """Market watch tab body: market chips (phones show one market at a time), broker-style rows, forward scoreboard."""
     if not watch or not watch.get("markets"):
@@ -216,6 +268,7 @@ def main():
     accounts += [(k, f"Jev (AI) — {k}", data) for k, data in status.get("JEV", {}).items()]
     advisor_html = advisor_section(status.get("ADVISOR"))
     watch_html = watch_section(status.get("WATCH")) + (f"<div class='grid sbgrid'>{advisor_html}</div>" if advisor_html else "")
+    orders_html = orders_section(accounts)
     tiles = "".join(summary_tile(*a) for a in accounts)
     day = {m: {r["symbol"]: r["d1"] for r in b["rows"]} for m, b in ((status.get("WATCH") or {}).get("markets") or {}).items()}
     cards = "".join(market_card(*a, day=day.get(a[0].split(":")[0], {})) for a in accounts)
@@ -261,6 +314,8 @@ h1.sec{{font-size:14px;margin:18px 0 8px}}
 .tabs{{display:flex;gap:4px;margin:2px 0 10px;border-bottom:1px solid var(--border)}}
 .tab{{background:none;border:0;border-bottom:2px solid transparent;color:var(--dim);font:600 14px -apple-system,sans-serif;padding:8px 14px;cursor:pointer}}
 .tab.on{{color:#6aa6ff;border-bottom-color:#4b8df8}}
+.chips2{{display:flex;gap:6px;overflow-x:auto;margin-bottom:8px}} .ochip{{background:var(--surface);border:1px solid var(--border);border-radius:14px;color:var(--dim);font:600 12px -apple-system,sans-serif;padding:5px 12px;white-space:nowrap;cursor:pointer}} .ochip.on{{color:#fff;background:#2f4a78;border-color:#4b8df8}}
+.oc{{display:none}} .oc.on{{display:block}}
 .chips{{display:none;gap:6px;overflow-x:auto;margin-bottom:6px}}
 .chip{{background:var(--surface);border:1px solid var(--border);border-radius:14px;color:var(--dim);font:600 12px -apple-system,sans-serif;padding:5px 12px;white-space:nowrap;cursor:pointer}}
 .chip.on{{color:#fff;background:#2f4a78;border-color:#4b8df8}}
@@ -282,9 +337,10 @@ table{{font-size:10.5px}} td,th{{padding:3px 3px}}}}
 <div class="top"><div class="asof">Last updated {now} · <span id="age" data-ts="{now_iso}"></span> · all times IST · published by GitHub Actions</div>
 <div class="rfbox"><button id="rf" class="rf" title="Start a fresh data run now">&#8635; Refresh</button><button id="rfset" class="rfset" title="Set or clear the GitHub token">&#9881;</button></div></div>
 <div id="rfmsg" class="rfmsg"></div>
-<div class="tabs"><button class="tab on" data-t="pf">Portfolio</button><button class="tab" data-t="mw">Market watch</button></div>
+<div class="tabs"><button class="tab on" data-t="pf">Portfolio</button><button class="tab" data-t="od">Orders</button><button class="tab" data-t="mw">Market watch</button></div>
 <div id="pf" class="pane"><div class="tiles">{tiles}</div>
 <div class="grid">{cards}</div></div>
+<div id="od" class="pane" hidden>{orders_html}</div>
 <div id="mw" class="pane" hidden>{watch_html}</div>
 <script>
 (function(){{
@@ -295,7 +351,8 @@ table{{font-size:10.5px}} td,th{{padding:3px 3px}}}}
   function market(m){{q('.chip').forEach(function(c){{c.classList.toggle('on',c.dataset.m===m);}});
     q('.wc').forEach(function(c){{c.classList.toggle('on',c.dataset.m===m);}});}}
   q('.chip').forEach(function(c){{c.onclick=function(){{market(c.dataset.m);}};}});
-  if(location.hash==='#mw')tab('mw');
+  q('.ochip').forEach(function(c){{c.onclick=function(){{q('.ochip').forEach(function(x){{x.classList.toggle('on',x===c);}});q('.oc').forEach(function(x){{x.classList.toggle('on',x.dataset.a===c.dataset.a);}});}};}});
+  var h=location.hash.slice(1);if(h==='mw'||h==='od')tab(h);
   /* ---- age + manual refresh (token stays in this browser only) ---- */
   var REPO={json.dumps(repo)}, REF={json.dumps(ref)};
   function age(){{var el=document.getElementById('age');if(!el)return;var m=(Date.now()-Date.parse(el.dataset.ts))/60000;

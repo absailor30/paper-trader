@@ -19,7 +19,14 @@ def history_view(trader: PaperTrader, limit: int = 15) -> Dict[str, Any]:
         "quantity": o["quantity"], "price": o["price"], "status": o["status"],
         "reason": o.get("reason") or o.get("reasoning", ""),
     } for o in reversed(trader.orders[-limit:])]
+    executed = [{
+        "time": str(o["timestamp"])[:16].replace("T", " "), "side": o["side"], "symbol": o["symbol"],
+        "quantity": o["quantity"], "price": o["price"], "value": o["quantity"] * o["price"],
+        "commission": o.get("commission", 0.0), "strategy": o.get("strategy", ""),
+        "pnl": o.get("pnl"), "pnl_pct": o.get("pnl_pct"),  # set on SELL orders only
+    } for o in reversed(trader.orders) if o.get("status") == "FILLED"][:300]
     return {
+        "executed": executed,
         "closed_trades": closed,
         "realized_pnl": sum(t["pnl"] for t in hist),
         "num_closed": len(hist),

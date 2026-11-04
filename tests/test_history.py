@@ -106,3 +106,26 @@ def test_times_shown_in_ist():
     assert to_ist("2026-10-27 22:25 UTC") == "2026-10-28 03:55 IST"  # crosses midnight
     assert to_ist("2026-09-23 04:41", suffix=False) == "2026-09-23 10:11"
     assert to_ist("garbage") == "garbage"
+
+
+def test_executed_orders_split_buys_sells_with_delta_and_realized_pnl():
+    from scripts.render_status_page import orders_section
+
+    t = _trader()
+    t.place_order("b1", "AAA", "BUY", 5.0, 100.0, "S")
+    t.place_order("s1", "AAA", "SELL", 5.0, 120.0, "S")
+    t.place_order("b2", "BBB", "BUY", 2.0, 50.0, "S")
+    t.place_order("b3", "CCC", "BUY", 999.0, 100.0, "S")  # rejected: must NOT appear as executed
+    t.update_prices({"BBB": 55.0})
+    v = history_view(t)
+    assert [o["side"] for o in v["executed"]] == ["BUY", "SELL", "BUY"] and all(o["symbol"] != "CCC" for o in v["executed"])
+    sell = [o for o in v["executed"] if o["side"] == "SELL"][0]
+    assert sell["pnl"] > 0 and sell["pnl_pct"] > 0
+    pos = t.portfolio.positions["BBB"]
+    data = {**t.get_performance_metrics(), **v, "positions": [{
+        "symbol": "BBB", "quantity": 2.0, "entry_price": pos["entry_price"], "current_price": 55.0, "invested": 100.0,
+        "current_value": 110.0, "unrealized_pnl": 9.9, "unrealized_pnl_pct": 9.9}]}
+    html = orders_section([("US", "US Stocks", data)])
+    assert "Sells &mdash; executed (1)" in html and "Buys &mdash; executed (2)" in html
+    assert "Realized P&amp;L (sells)" in html and "still held" in html and "position since sold" in html
+    assert "No executed orders yet" in orders_section([])
