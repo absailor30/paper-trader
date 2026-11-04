@@ -75,6 +75,19 @@ class Settings(BaseSettings):
         "USO",   # United States Oil Fund (WTI crude)
         "BNO",   # United States Brent Oil Fund
     ]
+    # US options paper account (long calls/puts on rule signals). Small on purpose (user's choice 2026-11-05): one contract
+    # covers 100 shares, so at $100 only cheap contracts fit and most days will log 'nothing affordable'.
+    options_capital: float = 100.0
+    options_commission_per_contract: float = 0.65
+    options_max_cost_fraction: float = 0.5   # one contract may use up to half the account (12% sizing cannot buy a contract)
+    options_max_positions: int = 2
+    options_dte_min: int = 30
+    options_dte_max: int = 60
+    options_min_open_interest: int = 50
+    options_max_spread: float = 0.35         # (ask-bid)/mid
+    options_stop_pct: float = -50.0          # exit when the premium is down this much
+    options_take_profit_pct: float = 100.0
+    options_exit_dte: int = 7                # close before expiry week
     commodities_capital: float = 100.0   # separate paper account, funded like the others (small on purpose)
 
     # Risk parameters

@@ -27,7 +27,7 @@ def to_ist(text, suffix=True):
     return dt.strftime("%Y-%m-%d %H:%M") + (" IST" if suffix else "")
 
 
-CCY = {"CRYPTO": "$", "US": "$", "INDIA": "₹", "COMMODITIES": "$"}
+CCY = {"CRYPTO": "$", "US": "$", "INDIA": "₹", "COMMODITIES": "$", "OPTIONS": "$"}
 
 
 def _indian_group(n: float) -> str:
@@ -264,7 +264,7 @@ def main():
     ref = os.environ.get("GITHUB_REF_NAME", "rebuild/v2")
     accounts = [(k, label, status[k]) for k, label in
                 [("US", "US Stocks"), ("INDIA", "India Stocks"), ("CRYPTO", "Crypto — Binance spot"),
-                 ("COMMODITIES", "Commodities — rotation top 3")] if k in status]
+                 ("COMMODITIES", "Commodities — rotation top 3"), ("OPTIONS", "Options — long calls/puts")] if k in status]
     accounts += [(k, f"Jev (AI) — {k}", data) for k, data in status.get("JEV", {}).items()]
     advisor_html = advisor_section(status.get("ADVISOR"))
     watch_html = watch_section(status.get("WATCH")) + (f"<div class='grid sbgrid'>{advisor_html}</div>" if advisor_html else "")

@@ -74,6 +74,7 @@ def main():
     retry_parser.add_argument("--symbol", required=True)
 
     sub.add_parser("commodities")
+    sub.add_parser("options")
     advise_plan = sub.add_parser("advise-plan")
     advise_plan.add_argument("--out", required=True)
     advise_plan.add_argument("--max", type=int, default=6)
@@ -200,6 +201,12 @@ def main():
         print(json.dumps({m: len(b["rows"]) for m, b in watch["markets"].items()}))
         return
 
+    if args.command == "options":
+        from paper_trader.options_orchestrator import OptionsBot
+        logger.info(f"AUTO_EXECUTE={settings.auto_execute}")
+        print(json.dumps(OptionsBot().run_cycle(), indent=2, default=str))
+        return
+
     if args.command == "commodities":
         from paper_trader.commodities_orchestrator import CommoditiesBot
         logger.info(f"AUTO_EXECUTE={settings.auto_execute}")
@@ -213,6 +220,12 @@ def main():
         crypto_bot = CryptoTradingBot()
         commodities_bot = CommoditiesBot()
         commodities_bot.mark_to_market()
+        from paper_trader.options_orchestrator import OptionsBot
+        options_bot = OptionsBot()
+        try:
+            options_bot.mark_to_market()
+        except Exception as e:  # an options data hiccup must never break the whole status page
+            logger.warning(f"options mark failed: {type(e).__name__}")
         stop_actions = stock_bot.check_all_stops_only()
         crypto_stop_actions = crypto_bot.check_stops_only()
         from paper_trader.jev_trader import jev_status
@@ -222,6 +235,7 @@ def main():
             "INDIA": {**stock_bot.get_status("INDIA"), "stop_actions": stop_actions["INDIA"]},
             "CRYPTO": {**crypto_bot.get_status(), "stop_actions": crypto_stop_actions},
             "COMMODITIES": commodities_bot.get_status(),
+            "OPTIONS": options_bot.get_status(),
             "WATCH": load_state("market_watch"),
             "ADVISOR": __import__("paper_trader.advisor", fromlist=["x"]).view(
                 load_state("advisor_log"), load_state("market_watch")),
