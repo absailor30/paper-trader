@@ -137,6 +137,15 @@ class Settings(BaseSettings):
         "ADAUSDT", "DOGEUSDT", "AVAXUSDT",
     ]
 
+    # Futures-style universes (long/short trend). Free data only: yfinance continuous front-month contracts (=F: unadjusted, small
+    # roll jumps), NSE index series as a PROXY for Nifty futures (no free NSE futures data), Binance SPOT as a proxy for perpetuals
+    # (the futures endpoint is geo-blocked from GitHub runners), and spot FX.
+    futures_us: List[str] = ["ES=F", "NQ=F", "YM=F", "RTY=F"]
+    futures_india: List[str] = ["^NSEI", "^NSEBANK"]
+    futures_commodities: List[str] = ["GC=F", "SI=F", "PL=F", "PA=F", "HG=F", "CL=F", "BZ=F", "NG=F"]
+    futures_crypto: List[str] = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "AVAXUSDT"]
+    forex_pairs: List[str] = ["EURUSD=X", "GBPUSD=X", "USDJPY=X", "AUDUSD=X", "USDCAD=X", "USDCHF=X", "USDINR=X", "NZDUSD=X"]
+
     # Costs (applied identically in backtest and live paper trading, so
     # backtest results and live results are directly comparable). Binance
     # spot taker fee (no BNB discount) happens to match the equity default

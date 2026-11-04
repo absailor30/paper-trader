@@ -1,0 +1,19 @@
+name: Futures search
+
+# Manual-only, read-only backtests (no DB, no orders): long-short trend on futures-style markets and forex.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run Futures search
+        run: PYTHONPATH=. python -u scripts/futures_search.py

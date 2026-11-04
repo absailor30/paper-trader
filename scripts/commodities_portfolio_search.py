@@ -83,20 +83,21 @@ def hold_weights(close) -> pd.DataFrame:
     return pd.DataFrame(BASE_W, index=close.index, columns=close.columns)
 
 
-def simulate(close: pd.DataFrame, weights: pd.DataFrame, lo: int, hi: int) -> dict:
+def simulate(close: pd.DataFrame, weights: pd.DataFrame, lo: int, hi: int, cost: float = COST) -> dict:
     """Account return over bars (lo, hi]: weights decided at bar t earn bar t+1's return."""
     r = close.pct_change().fillna(0.0)
     w = weights.shift(1).fillna(0.0)  # weight held DURING bar t = decided at t-1
     turnover = (w - w.shift(1).fillna(0.0)).abs().sum(axis=1)
-    pnl = (w * r).sum(axis=1) - COST * turnover
+    pnl = (w * r).sum(axis=1) - cost * turnover
     pnl = pnl.iloc[lo + 1:hi]
     equity = (1 + pnl).cumprod()
-    entries = int(((w > 0) & (w.shift(1).fillna(0.0) == 0)).iloc[lo + 1:hi].sum().sum())
+    prev = w.shift(1).fillna(0.0)
+    entries = int(((w != 0) & (np.sign(w) != np.sign(prev))).iloc[lo + 1:hi].sum().sum())  # new position or a long<->short flip
     return {
         "ret": float(equity.iloc[-1] - 1) * 100 if len(equity) else 0.0,
         "dd": float((equity / equity.cummax() - 1).min()) * 100 if len(equity) else 0.0,
         "entries": entries,
-        "exposure": float(w.iloc[lo + 1:hi].sum(axis=1).mean()) * 100,
+        "exposure": float(w.abs().iloc[lo + 1:hi].sum(axis=1).mean()) * 100,
     }
 
 
