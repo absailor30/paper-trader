@@ -69,10 +69,10 @@ def qty(q):
     return f"{q:,.4f}".rstrip("0").rstrip(".") if q < 1000 else f"{q:,.0f}"
 
 
-def summary_tile(key, label, data):
+def summary_tile(key, label, data, cls='tile'):
     ccy = CCY[key]
     ret = data["total_return_pct"]
-    return (f"<div class='tile'><div class='tl'>{label}</div>"
+    return (f"<div class='{cls}'><div class='tl'>{label}</div>"
             f"<div class='tv'>{money(ccy, data['total_value'])} <span class='{_cls(ret)}'>{pct(ret)}</span></div>"
             f"<div class='ts'>{len(data['positions'])} open &middot; realized "
             f"<span class='{_cls(data.get('realized_pnl', 0.0))}'>{money(ccy, data.get('realized_pnl', 0.0))}</span></div></div>")
@@ -271,7 +271,9 @@ def main():
     orders_html = orders_section(accounts)
     tiles = "".join(summary_tile(*a) for a in accounts)
     day = {m: {r["symbol"]: r["d1"] for r in b["rows"]} for m, b in ((status.get("WATCH") or {}).get("markets") or {}).items()}
-    cards = "".join(market_card(*a, day=day.get(a[0].split(":")[0], {})) for a in accounts)
+    cols = "".join(
+        f"<div class='acct'>{summary_tile(*a, cls='tile coltile')}{market_card(*a, day=day.get(a[0].split(':')[0], {}))}</div>"
+        for a in accounts)
     html = f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Paper Trader Status</title>
@@ -325,9 +327,12 @@ h1.sec{{font-size:14px;margin:18px 0 8px}}
 .rf:disabled{{opacity:.55;cursor:default}}
 .rfset{{background:none;border:1px solid var(--border);color:var(--dim);border-radius:14px;font-size:12px;padding:4px 8px;cursor:pointer}}
 .rfmsg{{font-size:11.5px;color:var(--dim);min-height:0;margin:0 0 4px}} .rfmsg:empty{{display:none}}
+.cols{{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(330px,100%),1fr));gap:10px;align-items:start}}
+.acct{{display:flex;flex-direction:column;gap:8px;min-width:0}} .coltile{{margin:0}}
+.tiles{{display:none}}
 .sbgrid{{margin-top:10px}} [hidden]{{display:none!important}}
 details.fold>summary{{margin-bottom:2px}}
-@media(max-width:600px){{.chips{{display:flex}} .wc{{display:none}} .wc.on{{display:block}} body{{padding:8px 8px}} h1{{font-size:15px}} .asof{{font-size:10px;margin-bottom:6px}}
+@media(max-width:600px){{.tiles{{display:grid}} .coltile{{display:none}} .cols{{grid-template-columns:1fr;gap:8px}} .chips{{display:flex}} .wc{{display:none}} .wc.on{{display:block}} body{{padding:8px 8px}} h1{{font-size:15px}} .asof{{font-size:10px;margin-bottom:6px}}
 .tiles{{grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}} .tile{{padding:6px 8px}} .tl,.ts{{font-size:10px}} .tv{{font-size:14px}}
 .grid{{grid-template-columns:1fr;gap:8px}} .card{{padding:8px 9px}} .big{{font-size:14px}} .v{{font-size:15px}} .sumbox{{padding:8px 10px}}
 .h{{padding:6px 0}} .h .l{{font-size:11px;line-height:1.45}} .h .big2{{font-size:14px}} h1.sec{{font-size:13px}}
@@ -339,7 +344,7 @@ table{{font-size:10.5px}} td,th{{padding:3px 3px}}}}
 <div id="rfmsg" class="rfmsg"></div>
 <div class="tabs"><button class="tab on" data-t="pf">Portfolio</button><button class="tab" data-t="od">Orders</button><button class="tab" data-t="mw">Market watch</button></div>
 <div id="pf" class="pane"><div class="tiles">{tiles}</div>
-<div class="grid">{cards}</div></div>
+<div class="cols">{cols}</div></div>
 <div id="od" class="pane" hidden>{orders_html}</div>
 <div id="mw" class="pane" hidden>{watch_html}</div>
 <script>
