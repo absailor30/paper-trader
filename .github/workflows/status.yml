@@ -32,7 +32,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment_retry.outputs.page_url || steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -55,5 +55,16 @@ jobs:
         with:
           path: public
 
+      # GitHub Pages occasionally fails to find the just-uploaded artifact ("Fetching artifact metadata failed", seen
+      # 2026-11-21/22). Try once, wait, try again; the run only fails if both attempts fail.
       - uses: actions/deploy-pages@v4
         id: deployment
+        continue-on-error: true
+
+      - name: Wait before retrying the Pages deploy
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 45
+
+      - uses: actions/deploy-pages@v4
+        id: deployment_retry
+        if: steps.deployment.outcome == 'failure'
